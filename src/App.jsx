@@ -8,6 +8,7 @@ import Landing from './pages/Landing'
 import Editor from './pages/Editor'
 import Dashboard from './pages/Dashboard'
 import Auth from './pages/Auth'
+import MusicButton from './components/MusicButton'
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth()
@@ -59,6 +60,7 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <AppRoutes />
+          <MusicButton />
         </Router>
         <Toaster />
       </QueryClientProvider>

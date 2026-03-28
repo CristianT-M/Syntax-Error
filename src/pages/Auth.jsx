@@ -55,8 +55,7 @@ export default function Auth() {
           return
         }
 
-        setMessage('Cont creat cu succes. Acum te poți loga.')
-        setIsLogin(true)
+        setMessage('Cont creat. Verifică emailul și apasă linkul de confirmare.')
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'A apărut o eroare.')

@@ -29,7 +29,13 @@ export function AuthProvider(/** @type {{ children: React.ReactNode }} */ { chil
   }, [])
 
   const signUp = async (/** @type {string} */ email, /** @type {string} */ password) => {
-    return await supabase.auth.signUp({ email, password })
+    return await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth`
+      }
+    })
   }
 
   const signIn = async (/** @type {string} */ email, /** @type {string} */ password) => {
