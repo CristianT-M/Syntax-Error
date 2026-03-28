@@ -30,7 +30,9 @@ function debounce(fn, wait = 300) {
     }, wait)
   }
 
-  debounced.cancel = () => clearTimeout(timeout)
+  debounced.cancel = () => {
+    clearTimeout(timeout)
+  }
 
   return debounced
 }
