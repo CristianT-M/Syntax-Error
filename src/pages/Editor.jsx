@@ -4,9 +4,9 @@ import { Plus, X, Wand2, Play, Copy } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
 import { starterFiles } from '@/lib/editor-defaults'
 import { useAuth } from '@/lib/AuthContext'
-import { getProjectBySlug, ensureProjectMembership } from '@/lib/project'
+import { supabase } from '@/lib/supabase'
 import ProjectChat from '@/components/ProjectChat'
-
+ 
 function getExtension(name = '') {
   return name.split('.').pop()?.toLowerCase() || ''
 }
@@ -140,7 +140,7 @@ int main() {
 }
 
 export default function Editor() {
-  const { slug } = useParams()
+  const { projectId } = useParams()
   const auth = useAuth()
   const user = auth?.user
 
@@ -160,31 +160,40 @@ export default function Editor() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (!user || !slug) {
-      setProjectLoading(false)
-      return
-    }
+  if (!user || !projectId) {
+    setProjectLoading(false)
+    return
+  }
 
-    async function loadProject() {
-      try {
-        setProjectLoading(true)
-        setProjectError('')
+  async function loadProject() {
+    try {
+      setProjectLoading(true)
+      setProjectError('')
 
-        if (slug) {
-          const foundProject = await getProjectBySlug(slug)
-          await ensureProjectMembership(foundProject.id, user.id)
-          setProject(foundProject)
-        }
-      } catch (error) {
-        console.error(error)
-        setProjectError('Nu am putut încărca proiectul.')
-      } finally {
-        setProjectLoading(false)
+      const { data: foundProject, error } = await supabase
+        .from('projects')
+        .select('*')
+        .or(`id.eq.${projectId},slug.eq.${projectId}`)
+        .single()
+
+      if (error || !foundProject) {
+        setProjectError('Proiectul nu există.')
+        setProject(null)
+        return
       }
-    }
 
-    loadProject()
-  }, [slug, user])
+      setProject(foundProject)
+    } catch (error) {
+      console.error(error)
+      setProjectError('Nu am putut încărca proiectul.')
+      setProject(null)
+    } finally {
+      setProjectLoading(false)
+    }
+  }
+
+  loadProject()
+}, [projectId, user])
 
   const activeFile = useMemo(() => {
     return files.find((file) => file.id === activeFileId) || files[0]

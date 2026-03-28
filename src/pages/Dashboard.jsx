@@ -139,59 +139,56 @@ export default function Dashboard() {
   })
 
   const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const slug = generateSlug()
+  mutationFn: async (data) => {
+    const slug = generateSlug()
 
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert({
-          owner_id: user.id,
-          name: data.name.trim(),
-          description: data.description.trim(),
-          language: data.language,
-          slug,
-          is_public: true,
-        })
-        .select()
-        .single()
+    // 1. creează proiectul
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        owner_id: user.id,
+        name: data.name.trim(),
+        description: data.description.trim(),
+        language: data.language,
+        slug,
+        is_public: true,
+      })
+      .select()
+      .single()
 
-      if (projectError) throw projectError
+    if (projectError) throw projectError
 
-      const { error: memberError } = await supabase
-        .from('project_members')
-        .insert({
-          project_id: project.id,
-          user_id: user.id,
-        })
+    // 2. creează fișier default
+    const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript
 
-      if (memberError) throw memberError
+    const { error: fileError } = await supabase
+      .from('project_files')
+      .insert({
+        project_id: project.id,
+        name: starter.name,
+        language: data.language,
+        content: starter.content,
+        is_entry: true,
+      })
 
-      const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript
+    if (fileError) throw fileError
 
-      const { error: fileError } = await supabase
-        .from('project_files')
-        .insert({
-          project_id: project.id,
-          name: starter.name,
-          language: data.language,
-          content: starter.content,
-          is_entry: true,
-        })
+    return project
+  },
 
-      if (fileError) throw fileError
+  onSuccess: (project) => {
+    queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
+    setCreateOpen(false)
+    setNewProject({ name: '', description: '', language: 'javascript' })
 
-      return project
-    },
-    onSuccess: (project) => {
-      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
-      setCreateOpen(false)
-      setNewProject({ name: '', description: '', language: 'javascript' })
-      navigate(`/editor/${project.slug}`)
-    },
-    onError: (error) => {
-      alert(error.message || 'Eroare la creare proiect.')
-    },
-  })
+    // 🔥 IMPORTANT
+    navigate(`/editor/${project.slug}`)
+  },
+
+  onError: (error) => {
+    alert(error.message || 'Eroare la creare proiect.')
+  },
+})
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
