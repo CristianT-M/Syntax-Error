@@ -1,7 +1,14 @@
 // @ts-nocheck
 import React, { useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { Copy, Check, Maximize2, Minimize2, FileCode2 } from 'lucide-react'
+import {
+  Copy,
+  Check,
+  Maximize2,
+  Minimize2,
+  FileCode2,
+  Play
+} from 'lucide-react'
 
 function getLanguageFromFileName(fileName = '') {
   const ext = fileName.split('.').pop()?.toLowerCase()
@@ -55,6 +62,7 @@ export default function MonacoCodeEditor({
   filename = 'main.js',
   readOnly = false,
   height = '100%',
+  onRun,
 }) {
   const editorRef = useRef(null)
   const [copied, setCopied] = useState(false)
@@ -136,6 +144,17 @@ export default function MonacoCodeEditor({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onRun}
+            className="rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            <span className="flex items-center gap-2">
+              <Play className="h-4 w-4" />
+              Run
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={handleCopy}

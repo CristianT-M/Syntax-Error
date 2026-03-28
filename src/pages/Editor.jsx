@@ -114,6 +114,15 @@ function makeStarterContent(/** @type {string} */ type, /** @type {string} */ fi
 }`
     case 'md':
       return `# ${fileName}`
+    case 'py':
+      return `print("Salut din ${fileName}")`
+    case 'cpp':
+      return `#include <iostream>
+
+int main() {
+  std::cout << "Salut din ${fileName}" << std::endl;
+  return 0;
+}`
     default:
       return ''
   }
@@ -272,16 +281,18 @@ export default function Editor() {
               />
 
               <select
-                value={newFileType}
-                onChange={(e) => setNewFileType(e.target.value)}
-                className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none"
-              >
-                <option value="html">HTML</option>
-                <option value="css">CSS</option>
-                <option value="js">JavaScript</option>
-                <option value="json">JSON</option>
-                <option value="md">Markdown</option>
-              </select>
+  value={newFileType}
+  onChange={(e) => setNewFileType(e.target.value)}
+  className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none"
+>
+  <option value="html">HTML</option>
+  <option value="css">CSS</option>
+  <option value="js">JavaScript</option>
+  <option value="json">JSON</option>
+  <option value="md">Markdown</option>
+  <option value="py">Python</option>
+  <option value="cpp">C++</option>
+</select>
 
               <button
                 type="button"

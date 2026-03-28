@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://syntax-error-edu.vercel.app',
+        'HTTP-Referer': 'https://syntax-error-penultimul.vercel.app',
         'X-Title': 'Syntax Error Monaco Editor',
       },
       body: JSON.stringify({
@@ -63,6 +63,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ code: newCode })
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Server error' })
+    return res.status(500).json({
+      error: error?.message || 'Server error',
+    })
   }
 }
