@@ -1,60 +1,50 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from './supabase'
 
-const AuthContext = createContext();
+/**
+ * @typedef {{
+ *   user: any | null
+ *   signUp: (email: string, password: string) => Promise<any>
+ *   signIn: (email: string, password: string) => Promise<any>
+ *   logout: () => Promise<void>
+ * }} AuthContextType
+ */
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState({ id: 'guest', name: 'Guest User', role: 'admin' });
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
-  const [authError, setAuthError] = useState(null);
+const AuthContext = createContext(/** @type {AuthContextType | null} */ (null))
+
+export function AuthProvider(/** @type {{ children: React.ReactNode }} */ { children }) {
+  /** @type {[any | null, Function]} */
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
-    setIsLoadingAuth(false);
-    setIsLoadingPublicSettings(false);
-  }, []);
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null)
+    })
 
-  const logout = (shouldRedirect = true) => {
-    setUser(null);
-    setIsAuthenticated(false);
-    if (shouldRedirect) {
-      window.location.href = '/';
-    }
-  };
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
 
-  const navigateToLogin = () => {
-    window.location.href = '/';
-  };
+    return () => listener.subscription.unsubscribe()
+  }, [])
 
-  const checkAppState = async () => {
-    return {
-      user,
-      isAuthenticated,
-    };
-  };
+  const signUp = async (/** @type {string} */ email, /** @type {string} */ password) => {
+    return await supabase.auth.signUp({ email, password })
+  }
+
+  const signIn = async (/** @type {string} */ email, /** @type {string} */ password) => {
+    return await supabase.auth.signInWithPassword({ email, password })
+  }
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+  }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isLoadingAuth,
-        isLoadingPublicSettings,
-        authError,
-        logout,
-        navigateToLogin,
-        checkAppState,
-      }}
-    >
+    <AuthContext.Provider value={{ user, signUp, signIn, logout }}>
       {children}
     </AuthContext.Provider>
-  );
-};
+  )
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext)

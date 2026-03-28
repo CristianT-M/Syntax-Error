@@ -1,46 +1,59 @@
-// @ts-nocheck
-const initialRooms = [
-  {
-    id: 'room-1',
-    name: 'iTECify Live Room',
-    description: 'A collaborative prototyping workspace for team and AI',
-    language: 'javascript',
-    createdAt: '2026-03-28T00:00:00.000Z',
-  },
-  {
-    id: 'room-2',
-    name: 'Backend Sandbox',
-    description: 'A secure, isolated environment for backend route generation',
-    language: 'python',
-    createdAt: '2026-03-28T00:00:00.000Z',
-  },
-];
-
-let rooms = [...initialRooms];
-let nextRoomId = 3;
+import { supabase } from '../lib/supabase';
 
 export const apiClient = {
-  auth: {
-    me: async () => ({ id: 'guest', name: 'Guest User', role: 'admin' }),
-    logout: async () => {},
-    redirectToLogin: async () => {},
-  },
   entities: {
     Room: {
       list: async () => {
-        return rooms;
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) throw userError;
+        if (!user) return [];
+
+        const { data, error } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('owner_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
       },
-      create: async (data) => {
-        const room = {
-          id: `room-${nextRoomId++}`,
-          createdAt: new Date().toISOString(),
-          ...data,
-        };
-        rooms = [room, ...rooms];
-        return room;
+
+      create: async (/** @type {{ name: string; description: string; language: string }} */ room) => {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) throw userError;
+        if (!user) throw new Error('Trebuie să fii logat.');
+
+        const { data, error } = await supabase
+          .from('rooms')
+          .insert({
+            owner_id: user.id,
+            name: room.name,
+            description: room.description || '',
+            language: room.language || 'javascript',
+            status: 'idle',
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
       },
-      delete: async (id) => {
-        rooms = rooms.filter((room) => room.id !== id);
+
+      delete: async (/** @type {string} */ id) => {
+        const { error } = await supabase
+          .from('rooms')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
         return { success: true };
       },
     },

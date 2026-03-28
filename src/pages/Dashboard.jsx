@@ -1,10 +1,12 @@
+// @ts-nocheck
+
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  Plus, Code2, Users, Clock, Play, Search, 
-  MoreHorizontal, Trash2, FolderOpen, ArrowLeft, 
-  GitBranch, Sparkles, Activity 
+import {
+  Plus, Code2, Search, Play,
+  MoreHorizontal, Trash2, FolderOpen, ArrowLeft,
+  GitBranch, Activity
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +27,9 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiClient } from '@/api/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
+import AuthButtons from '../components/AuthButtons';
 
 const LANG_COLORS = {
   javascript: 'bg-amber-400',
@@ -49,12 +52,17 @@ const LANG_LABELS = {
 export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [newRoom, setNewRoom] = useState({ name: '', description: '', language: 'javascript' });
+  const [newRoom, setNewRoom] = useState({
+    name: '',
+    description: '',
+    language: 'javascript'
+  });
+
   const queryClient = useQueryClient();
 
   const { data: rooms = [], isLoading } = useQuery({
     queryKey: ['rooms'],
-    queryFn: () => apiClient.entities.Room.list('-created_date'),
+    queryFn: () => apiClient.entities.Room.list(),
   });
 
   const createMutation = useMutation({
@@ -64,20 +72,27 @@ export default function Dashboard() {
       setCreateOpen(false);
       setNewRoom({ name: '', description: '', language: 'javascript' });
     },
+    onError: (error) => {
+      alert(error.message || 'Eroare la creare proiect.');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => apiClient.entities.Room.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error) => {
+      alert(error.message || 'Eroare la ștergere proiect.');
+    },
   });
 
-  const filteredRooms = rooms.filter(r => 
-    r.name?.toLowerCase().includes(search.toLowerCase())
+  const filteredRooms = rooms.filter((room) =>
+    room.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -86,6 +101,7 @@ export default function Dashboard() {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             </Link>
+
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
                 <Code2 className="w-3.5 h-3.5 text-primary" />
@@ -112,10 +128,12 @@ export default function Dashboard() {
                   Proiect Nou
                 </Button>
               </DialogTrigger>
+
               <DialogContent className="bg-card border-border">
-                <DialogHeader>
+                <DialogHeader className="space-y-2">
                   <DialogTitle className="text-lg">Creează un proiect nou</DialogTitle>
                 </DialogHeader>
+
                 <div className="space-y-4 mt-2">
                   <div className="space-y-2">
                     <Label className="text-xs">Nume proiect</Label>
@@ -126,6 +144,7 @@ export default function Dashboard() {
                       className="bg-secondary/50"
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label className="text-xs">Descriere</Label>
                     <Input
@@ -135,19 +154,26 @@ export default function Dashboard() {
                       className="bg-secondary/50"
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label className="text-xs">Limbaj principal</Label>
-                    <Select value={newRoom.language} onValueChange={(v) => setNewRoom({ ...newRoom, language: v })}>
+                    <Select
+                      value={newRoom.language}
+                      onValueChange={(value) => setNewRoom({ ...newRoom, language: value })}
+                    >
                       <SelectTrigger className="bg-secondary/50">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(LANG_LABELS).map(([k, v]) => (
-                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        {Object.entries(LANG_LABELS).map(([key, value]) => (
+                          <SelectItem key={key} value={key}>
+                            {value}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
                   <Button
                     className="w-full bg-primary hover:bg-primary/90"
                     onClick={() => createMutation.mutate(newRoom)}
@@ -158,20 +184,23 @@ export default function Dashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            <AuthButtons />
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold mb-1">Proiectele tale</h1>
-          <p className="text-sm text-muted-foreground">Creează și colaborează pe proiecte în timp real</p>
+          <p className="text-sm text-muted-foreground">
+            Creează și colaborează pe proiecte în timp real
+          </p>
         </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1,2,3].map(i => (
+            {[1, 2, 3].map((i) => (
               <div key={i} className="h-40 rounded-xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
@@ -185,7 +214,11 @@ export default function Dashboard() {
               {search ? 'Încearcă alt termen de căutare' : 'Creează primul tău proiect pentru a începe'}
             </p>
             {!search && (
-              <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 bg-primary hover:bg-primary/90">
+              <Button
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+                className="gap-1.5 bg-primary hover:bg-primary/90"
+              >
                 <Plus className="w-3.5 h-3.5" />
                 Proiect Nou
               </Button>
@@ -206,14 +239,20 @@ export default function Dashboard() {
                       <div className={`w-2.5 h-2.5 rounded-full ${LANG_COLORS[room.language] || 'bg-muted-foreground'}`} />
                       <h3 className="font-semibold text-sm truncate max-w-[180px]">{room.name}</h3>
                     </div>
+
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
+
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-destructive text-xs"
                           onClick={() => deleteMutation.mutate(room.id)}
                         >
@@ -223,27 +262,41 @@ export default function Dashboard() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </CardHeader>
+
                   <CardContent className="p-4 pt-0">
                     {room.description && (
-                      <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2">{room.description}</p>
+                      <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2">
+                        {room.description}
+                      </p>
                     )}
+
                     <div className="flex items-center gap-2 mb-3">
                       <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
                         <GitBranch className="w-2.5 h-2.5" />
                         main
                       </Badge>
+
                       <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
                         {LANG_LABELS[room.language] || room.language}
                       </Badge>
+
                       {room.status === 'running' && (
-                        <Badge className="h-5 text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1">
+                        <Badge
+                          variant="secondary"
+                          className="h-5 text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1"
+                        >
                           <Activity className="w-2.5 h-2.5" />
                           Running
                         </Badge>
                       )}
                     </div>
-                    <Link to="/editor">
-                      <Button size="sm" variant="secondary" className="w-full h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary">
+
+                    <Link to={`/editor/${room.id}`}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="w-full h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary"
+                      >
                         <Play className="w-3 h-3" />
                         Deschide în Editor
                       </Button>
