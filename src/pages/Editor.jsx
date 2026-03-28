@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Plus, X, Wand2, Play, Copy } from 'lucide-react'
+// @ts-nocheck
+
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import debounce from 'lodash.debounce'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { Plus, X, Wand2, Play, Copy, Users } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
-import { starterFiles } from '@/lib/editor-defaults'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase'
 import ProjectChat from '@/components/ProjectChat'
+import {
+  ensureProfile,
+  ensureProjectMembership,
+  getProjectBySlug,
+  getProjectFiles,
+  getProjectMembers,
+  createProjectFile,
+  updateProjectFile,
+  deleteProjectFile,
+  getUserCursorColor,
+  touchProject
+} from '@/lib/project'
 
 function getExtension(name = '') {
   return name.split('.').pop()?.toLowerCase() || ''
@@ -22,10 +36,6 @@ function isCssFile(name = '') {
 function isJsFile(name = '') {
   const ext = getExtension(name)
   return ext === 'js' || ext === 'mjs' || ext === 'cjs'
-}
-
-function isUUID(value = '') {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 /**
@@ -113,7 +123,7 @@ function makeStarterContent(type, fileName) {
   <title>${fileName}</title>
 </head>
 <body>
-  
+
 </body>
 </html>`
     case 'css':
@@ -144,7 +154,8 @@ int main() {
 }
 
 export default function Editor() {
-  const { projectId } = useParams()
+  const { slug } = useParams()
+  const [searchParams] = useSearchParams()
   const auth = useAuth()
   const user = auth?.user
 
@@ -154,17 +165,53 @@ export default function Editor() {
   const [projectError, setProjectError] = useState('')
 
   /** @type {[any[], Function]} */
-  const [files, setFiles] = useState(starterFiles)
-  const [activeFileId, setActiveFileId] = useState(starterFiles[0]?.id ?? '1')
-  const [previewDoc, setPreviewDoc] = useState(buildPreviewDocument(starterFiles))
+  const [files, setFiles] = useState([])
+  const [activeFileId, setActiveFileId] = useState(null)
+  const [previewDoc, setPreviewDoc] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
   const [isLoadingAI, setIsLoadingAI] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [newFileType, setNewFileType] = useState('js')
   const [copied, setCopied] = useState(false)
 
+  /** @type {[any[], Function]} */
+  const [collaborators, setCollaborators] = useState([])
+  /** @type {[any[], Function]} */
+  const [remoteCursors, setRemoteCursors] = useState([])
+
+  const fileChannelRef = useRef(null)
+  const presenceChannelRef = useRef(null)
+
+  const activeFile = useMemo(() => {
+    return files.find((file) => file.id === activeFileId) || files[0] || null
+  }, [files, activeFileId])
+
+  const projectLink = project
+    ? `${window.location.origin}/editor/${project.slug}?share=${project.share_token}`
+    : ''
+
+  const saveFileDebounced = useMemo(
+    () =>
+      debounce(async ({ fileId, content, userId, projectId }) => {
+        await updateProjectFile({
+          fileId,
+          content,
+          userId
+        })
+
+        await touchProject(projectId)
+      }, 350),
+    []
+  )
+
   useEffect(() => {
-    if (!user || !projectId) {
+    return () => {
+      saveFileDebounced.cancel()
+    }
+  }, [saveFileDebounced])
+
+  useEffect(() => {
+    if (!user || !slug) {
       setProjectLoading(false)
       return
     }
@@ -174,29 +221,43 @@ export default function Editor() {
         setProjectLoading(true)
         setProjectError('')
 
-        let query = supabase
-          .from('projects')
-          .select('*')
+        await ensureProfile(user)
 
-        if (isUUID(projectId)) {
-          query = query.eq('id', projectId)
-        } else {
-          query = query.eq('slug', projectId)
+        const foundProject = await getProjectBySlug(slug)
+        const shareToken = searchParams.get('share')
+
+        if (foundProject.share_token && shareToken && shareToken !== foundProject.share_token) {
+          throw new Error('Link de share invalid.')
         }
 
-        const { data: foundProject, error } = await query.single()
+        await ensureProjectMembership(foundProject.id, user.id, 'editor')
 
-        if (error || !foundProject) {
-          console.error('Project load error:', error)
-          setProjectError('Proiectul nu există.')
-          setProject(null)
-          return
-        }
+        const [projectFiles, members] = await Promise.all([
+          getProjectFiles(foundProject.id),
+          getProjectMembers(foundProject.id)
+        ])
 
         setProject(foundProject)
+        setFiles(projectFiles || [])
+        setActiveFileId(projectFiles?.[0]?.id ?? null)
+        setPreviewDoc(buildPreviewDocument(projectFiles || []))
+        setCollaborators(
+          (members || []).map((member) => ({
+            userId: member.user_id,
+            username:
+              (Array.isArray(member.profiles)
+                ? member.profiles[0]?.username
+                : member.profiles?.username) || 'User',
+            color:
+              (Array.isArray(member.profiles)
+                ? member.profiles[0]?.cursor_color
+                : member.profiles?.cursor_color) || getUserCursorColor(member.user_id),
+            role: member.role || 'editor'
+          }))
+        )
       } catch (error) {
         console.error(error)
-        setProjectError('Nu am putut încărca proiectul.')
+        setProjectError(error?.message || 'Nu am putut încărca proiectul.')
         setProject(null)
       } finally {
         setProjectLoading(false)
@@ -204,33 +265,174 @@ export default function Editor() {
     }
 
     loadProject()
-  }, [projectId, user])
+  }, [slug, user, searchParams])
 
-  const activeFile = useMemo(() => {
-    return files.find((file) => file.id === activeFileId) || files[0]
-  }, [files, activeFileId])
+  useEffect(() => {
+    setPreviewDoc(buildPreviewDocument(files))
+  }, [files])
 
-  const projectLink = project
-    ? `${window.location.origin}/editor/${project.slug}`
-    : ''
+  useEffect(() => {
+    if (!project?.id || !user?.id) return
 
-  /** @param {any} nextContent */
-  const updateActiveFileContent = (nextContent) => {
-    setFiles(
-      /** @param {any[]} prev */
-      (prev) =>
-        prev.map((file) =>
-          file.id === activeFileId
-            ? { ...file, content: nextContent ?? '' }
-            : file
+    let fileChannel
+    let presenceChannel
+
+    async function setupRealtime() {
+      fileChannel = supabase.channel(`project-files-${project.id}`)
+      fileChannelRef.current = fileChannel
+
+      fileChannel
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'project_files',
+            filter: `project_id=eq.${project.id}`
+          },
+          (payload) => {
+            const inserted = payload.new
+
+            setFiles((prev) => {
+              if (prev.some((file) => file.id === inserted.id)) return prev
+              const next = [...prev, inserted]
+              return next
+            })
+
+            setActiveFileId((prev) => prev || inserted.id)
+          }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'project_files',
+            filter: `project_id=eq.${project.id}`
+          },
+          (payload) => {
+            const updated = payload.new
+
+            setFiles((prev) =>
+              prev.map((file) => (file.id === updated.id ? updated : file))
+            )
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'project_files',
+            filter: `project_id=eq.${project.id}`
+          },
+          (payload) => {
+            const deletedId = payload.old.id
+
+            setFiles((prev) => {
+              const next = prev.filter((file) => file.id !== deletedId)
+              return next
+            })
+
+            setActiveFileId((prev) => {
+              if (prev !== deletedId) return prev
+              const remaining = files.filter((file) => file.id !== deletedId)
+              return remaining[0]?.id ?? null
+            })
+          }
+        )
+        .subscribe()
+
+      presenceChannel = supabase.channel(`project-presence-${project.id}`, {
+        config: {
+          presence: {
+            key: user.id
+          },
+          broadcast: {
+            self: false
+          }
+        }
+      })
+
+      presenceChannelRef.current = presenceChannel
+
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState()
+          const users = Object.values(state).flat()
+
+          const uniqueUsers = Array.from(
+            new Map(
+              users.map((entry) => [
+                entry.user_id,
+                {
+                  userId: entry.user_id,
+                  username: entry.username,
+                  color: entry.color,
+                  role: entry.role || 'editor'
+                }
+              ])
+            ).values()
+          )
+
+          setCollaborators(uniqueUsers)
+        })
+        .on('broadcast', { event: 'cursor-move' }, ({ payload }) => {
+          setRemoteCursors((prev) => {
+            const filtered = prev.filter((cursor) => cursor.userId !== payload.userId)
+            return [...filtered, payload]
+          })
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await presenceChannel.track({
+              user_id: user.id,
+              username:
+                user.user_metadata?.username ||
+                user.email?.split('@')[0] ||
+                'User',
+              color: getUserCursorColor(user.id),
+              role: 'editor'
+            })
+          }
+        })
+    }
+
+    setupRealtime().catch((error) => {
+      console.error('Realtime setup error:', error)
+    })
+
+    return () => {
+      if (fileChannel) supabase.removeChannel(fileChannel)
+      if (presenceChannel) supabase.removeChannel(presenceChannel)
+    }
+  }, [project?.id, user?.id])
+
+  /** @param {string} nextContent */
+  function updateActiveFileContent(nextContent) {
+    if (!activeFile || !project?.id || !user?.id) return
+
+    setFiles((prev) =>
+      prev.map((file) =>
+        file.id === activeFile.id
+          ? { ...file, content: nextContent ?? '' }
+          : file
+      )
     )
+
+    saveFileDebounced({
+      fileId: activeFile.id,
+      content: nextContent ?? '',
+      userId: user.id,
+      projectId: project.id
+    })
   }
 
-  const createNewFile = () => {
+  async function createNewFile() {
+    if (!project?.id || !user?.id) return
+
     const trimmedName = newFileName.trim()
     const finalName = trimmedName || `file-${files.length + 1}.${newFileType}`
-
     const hasExtension = finalName.includes('.')
     const safeName = hasExtension ? finalName : `${finalName}.${newFileType}`
 
@@ -243,43 +445,54 @@ export default function Editor() {
       return
     }
 
-    const newFile = {
-      id: String(Date.now()),
-      name: safeName,
-      content: makeStarterContent(newFileType, safeName),
-    }
+    try {
+      const created = await createProjectFile({
+        projectId: project.id,
+        name: safeName,
+        language: newFileType,
+        content: makeStarterContent(newFileType, safeName),
+        updatedBy: user.id
+      })
 
-    const nextFiles = [...files, newFile]
-    setFiles(nextFiles)
-    setActiveFileId(newFile.id)
-    setNewFileName('')
-    setNewFileType('js')
-    setPreviewDoc(buildPreviewDocument(nextFiles))
+      setFiles((prev) => [...prev, created])
+      setActiveFileId(created.id)
+      setNewFileName('')
+      setNewFileType('js')
+      await touchProject(project.id)
+    } catch (error) {
+      console.error(error)
+      alert(error?.message || 'Nu am putut crea fișierul.')
+    }
   }
 
-  /** @param {any} fileId */
-  const closeFile = (fileId) => {
-    if (files.length === 1) return
-
-    const nextFiles = files.filter(
-      /** @param {any} file */
-      (file) => file.id !== fileId
-    )
-
-    setFiles(nextFiles)
-
-    if (activeFileId === fileId) {
-      setActiveFileId(nextFiles[0]?.id ?? null)
+  async function closeFile(fileId) {
+    if (files.length === 1) {
+      alert('Proiectul trebuie să aibă cel puțin un fișier.')
+      return
     }
 
-    setPreviewDoc(buildPreviewDocument(nextFiles))
+    try {
+      await deleteProjectFile(fileId)
+
+      const nextFiles = files.filter((file) => file.id !== fileId)
+      setFiles(nextFiles)
+
+      if (activeFileId === fileId) {
+        setActiveFileId(nextFiles[0]?.id ?? null)
+      }
+
+      await touchProject(project.id)
+    } catch (error) {
+      console.error(error)
+      alert(error?.message || 'Nu am putut șterge fișierul.')
+    }
   }
 
-  const runCode = () => {
+  function runCode() {
     setPreviewDoc(buildPreviewDocument(files))
   }
 
-  const copyProjectLink = async () => {
+  async function copyProjectLink() {
     if (!projectLink) return
 
     try {
@@ -292,7 +505,31 @@ export default function Editor() {
     }
   }
 
-  const askAI = async () => {
+  async function handleCursorChange(position) {
+    if (!presenceChannelRef.current || !activeFile || !user?.id) return
+
+    try {
+      await presenceChannelRef.current.send({
+        type: 'broadcast',
+        event: 'cursor-move',
+        payload: {
+          userId: user.id,
+          username:
+            user.user_metadata?.username ||
+            user.email?.split('@')[0] ||
+            'User',
+          color: getUserCursorColor(user.id),
+          fileId: activeFile.id,
+          lineNumber: position.lineNumber,
+          column: position.column
+        }
+      })
+    } catch (error) {
+      console.error('Cursor broadcast error:', error)
+    }
+  }
+
+  async function askAI() {
     if (!activeFile) {
       alert('Nu există fișier activ.')
       return
@@ -313,6 +550,7 @@ export default function Editor() {
           prompt: aiPrompt,
           code: activeFile.content,
           filename: activeFile.name,
+          projectId: project?.id
         }),
       })
 
@@ -331,18 +569,21 @@ export default function Editor() {
 
       const newCode = data.code ?? ''
 
-      setFiles(
-        /** @param {any[]} prev */
-        (prev) =>
-          prev.map(
-            /** @param {any} file */
-            (file) =>
-              file.id === activeFileId
-                ? { ...file, content: newCode }
-                : file
-          )
+      setFiles((prev) =>
+        prev.map((file) =>
+          file.id === activeFile.id
+            ? { ...file, content: newCode }
+            : file
+        )
       )
 
+      await updateProjectFile({
+        fileId: activeFile.id,
+        content: newCode,
+        userId: user.id
+      })
+
+      await touchProject(project.id)
       setAiPrompt('')
     } catch (error) {
       alert((error instanceof Error ? error.message : String(error)) || 'A apărut o eroare la AI.')
@@ -350,6 +591,10 @@ export default function Editor() {
       setIsLoadingAI(false)
     }
   }
+
+  const visibleRemoteCursors = remoteCursors.filter(
+    (cursor) => cursor.userId !== user?.id && cursor.fileId === activeFile?.id
+  )
 
   if (projectLoading) {
     return (
@@ -381,7 +626,9 @@ export default function Editor() {
         <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 py-4">
           <div>
             <h1 className="text-xl font-semibold">{project.name}</h1>
-            <p className="text-sm text-slate-400">Editor colaborativ + project chat</p>
+            <p className="text-sm text-slate-400">
+              Editor colaborativ + cursoare live + project chat
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -397,7 +644,27 @@ export default function Editor() {
         </div>
 
         <div className="mx-auto max-w-[1700px] px-4 pb-4">
-          <p className="truncate text-xs text-slate-400">{projectLink}</p>
+          <p className="mb-3 truncate text-xs text-slate-400">{projectLink}</p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
+              <Users className="h-4 w-4" />
+              <span>{collaborators.length} online</span>
+            </div>
+
+            {collaborators.map((member) => (
+              <div
+                key={member.userId}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: member.color }}
+                />
+                <span className="text-white">{member.username}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -525,6 +792,8 @@ export default function Editor() {
                   onChange={updateActiveFileContent}
                   height="100%"
                   onRun={runCode}
+                  onCursorChange={handleCursorChange}
+                  remoteCursors={visibleRemoteCursors}
                 />
               </div>
             </div>

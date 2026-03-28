@@ -1,12 +1,21 @@
 // @ts-nocheck
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Plus, Code2, Search, Play,
-  MoreHorizontal, Trash2, FolderOpen, ArrowLeft,
-  GitBranch, Activity, Copy
+  Plus,
+  Code2,
+  Search,
+  Play,
+  MoreHorizontal,
+  Trash2,
+  FolderOpen,
+  ArrowLeft,
+  GitBranch,
+  Activity,
+  Copy,
+  Users
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,11 +35,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/AuthContext'
 import AuthButtons from '../components/AuthButtons'
+import { createProject, ensureProfile } from '@/lib/project'
 
 const LANG_COLORS = {
   javascript: 'bg-amber-400',
@@ -64,7 +80,7 @@ const DEFAULT_FILES = {
   rust: {
     name: 'main.rs',
     content: `fn main() {
-    println!("Hello from iTECify!");
+  println!("Hello from iTECify!");
 }`,
   },
   typescript: {
@@ -78,7 +94,7 @@ const DEFAULT_FILES = {
 import "fmt"
 
 func main() {
-    fmt.Println("Hello from iTECify!")
+  fmt.Println("Hello from iTECify!")
 }`,
   },
   cpp: {
@@ -101,15 +117,6 @@ int main() {
   },
 }
 
-function generateSlug(length = 8) {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return result
-}
-
 export default function Dashboard() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -130,7 +137,14 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          project_members (
+            user_id,
+            role
+          )
+        `)
+        .or(`owner_id.eq.${user.id},id.in.(select project_id from project_members where user_id = '${user.id}')`)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -139,56 +153,49 @@ export default function Dashboard() {
   })
 
   const createMutation = useMutation({
-  mutationFn: async (data) => {
-    const slug = generateSlug()
+    mutationFn: async (data) => {
+      await ensureProfile(user)
 
-    // 1. creează proiectul
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .insert({
-        owner_id: user.id,
+      const project = await createProject({
         name: data.name.trim(),
         description: data.description.trim(),
         language: data.language,
-        slug,
-        is_public: true,
-      })
-      .select()
-      .single()
-
-    if (projectError) throw projectError
-
-    // 2. creează fișier default
-    const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript
-
-    const { error: fileError } = await supabase
-      .from('project_files')
-      .insert({
-        project_id: project.id,
-        name: starter.name,
-        language: data.language,
-        content: starter.content,
-        is_entry: true,
+        ownerId: user.id,
       })
 
-    if (fileError) throw fileError
+      const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript
 
-    return project
-  },
+      const { error: fileError } = await supabase
+        .from('project_files')
+        .insert({
+          project_id: project.id,
+          name: starter.name,
+          language: data.language,
+          content: starter.content,
+          is_entry: true,
+          updated_by: user.id
+        })
 
-  onSuccess: (project) => {
-    queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
-    setCreateOpen(false)
-    setNewProject({ name: '', description: '', language: 'javascript' })
+      if (fileError) throw fileError
 
-    // 🔥 IMPORTANT
-    navigate(`/editor/${project.slug}`)
-  },
+      return project
+    },
 
-  onError: (error) => {
-    alert(error.message || 'Eroare la creare proiect.')
-  },
-})
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
+      setCreateOpen(false)
+      setNewProject({
+        name: '',
+        description: '',
+        language: 'javascript'
+      })
+      navigate(`/editor/${project.slug}?share=${project.share_token}`)
+    },
+
+    onError: (error) => {
+      alert(error.message || 'Eroare la creare proiect.')
+    },
+  })
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
@@ -207,13 +214,16 @@ export default function Dashboard() {
     },
   })
 
-  const filteredProjects = projects.filter((project) =>
-    project.name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const text = `${project.name || ''} ${project.description || ''}`.toLowerCase()
+      return text.includes(search.toLowerCase())
+    })
+  }, [projects, search])
 
   async function copyProjectLink(project) {
     try {
-      const link = `${window.location.origin}/editor/${project.slug}`
+      const link = `${window.location.origin}/editor/${project.slug}?share=${project.share_token}`
       await navigator.clipboard.writeText(link)
       setCopiedId(project.id)
       setTimeout(() => setCopiedId(null), 1500)
@@ -225,54 +235,56 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-20 border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
             <Link to="/">
               <Button variant="ghost" size="icon" className="h-8 w-8">
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
 
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Code2 className="w-3.5 h-3.5 text-primary" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/20">
+                <Code2 className="h-3.5 w-3.5 text-primary" />
               </div>
-              <span className="font-bold text-sm">iTECify</span>
+              <span className="text-sm font-bold">iTECify</span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Caută proiecte..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-8 w-56 text-xs bg-secondary/50"
+                className="h-8 w-56 bg-secondary/50 pl-8 text-xs"
               />
             </div>
 
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90">
-                  <Plus className="w-3.5 h-3.5" />
+                <Button size="sm" className="h-8 gap-1.5 bg-primary text-xs hover:bg-primary/90">
+                  <Plus className="h-3.5 w-3.5" />
                   Proiect Nou
                 </Button>
               </DialogTrigger>
 
-              <DialogContent className="bg-card border-border">
+              <DialogContent className="border-border bg-card">
                 <DialogHeader className="space-y-2">
                   <DialogTitle className="text-lg">Creează un proiect nou</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 mt-2">
+                <div className="mt-2 space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs">Nume proiect</Label>
                     <Input
                       placeholder="Ex: iTEC API Backend"
                       value={newProject.name}
-                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                      onChange={(e) =>
+                        setNewProject({ ...newProject, name: e.target.value })
+                      }
                       className="bg-secondary/50"
                     />
                   </div>
@@ -282,7 +294,9 @@ export default function Dashboard() {
                     <Input
                       placeholder="O scurtă descriere..."
                       value={newProject.description}
-                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      onChange={(e) =>
+                        setNewProject({ ...newProject, description: e.target.value })
+                      }
                       className="bg-secondary/50"
                     />
                   </div>
@@ -291,7 +305,9 @@ export default function Dashboard() {
                     <Label className="text-xs">Limbaj principal</Label>
                     <Select
                       value={newProject.language}
-                      onValueChange={(value) => setNewProject({ ...newProject, language: value })}
+                      onValueChange={(value) =>
+                        setNewProject({ ...newProject, language: value })
+                      }
                     >
                       <SelectTrigger className="bg-secondary/50">
                         <SelectValue />
@@ -322,135 +338,153 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold mb-1">Proiectele tale</h1>
+          <h1 className="mb-1 text-2xl font-bold">Proiectele tale</h1>
           <p className="text-sm text-muted-foreground">
             Creează și colaborează pe proiecte în timp real
           </p>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-40 rounded-xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-40 animate-pulse rounded-xl bg-secondary/30" />
             ))}
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="text-center py-20">
-            <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="font-medium text-muted-foreground mb-1">
+          <div className="py-20 text-center">
+            <FolderOpen className="mx-auto mb-4 h-12 w-12 text-muted-foreground/30" />
+            <h3 className="mb-1 font-medium text-muted-foreground">
               {search ? 'Niciun proiect găsit' : 'Niciun proiect încă'}
             </h3>
-            <p className="text-sm text-muted-foreground/60 mb-4">
-              {search ? 'Încearcă alt termen de căutare' : 'Creează primul tău proiect pentru a începe'}
+            <p className="mb-4 text-sm text-muted-foreground/60">
+              {search
+                ? 'Încearcă alt termen de căutare'
+                : 'Creează primul tău proiect pentru a începe'}
             </p>
+
             {!search && (
               <Button
                 size="sm"
                 onClick={() => setCreateOpen(true)}
                 className="gap-1.5 bg-primary hover:bg-primary/90"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="h-3.5 w-3.5" />
                 Proiect Nou
               </Button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects.map((project, i) => (
-              <motion.div
-                key={project.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <Card className="bg-card/60 border-border hover:border-primary/30 transition-all group overflow-hidden">
-                  <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${LANG_COLORS[project.language] || 'bg-muted-foreground'}`} />
-                      <h3 className="font-semibold text-sm truncate max-w-[180px]">{project.name}</h3>
-                    </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredProjects.map((project, i) => {
+              const collaboratorCount = project.project_members?.length || 1
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
+              return (
+                <motion.div
+                  key={project.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <Card className="group overflow-hidden border-border bg-card/60 transition-all hover:border-primary/30">
+                    <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            LANG_COLORS[project.language] || 'bg-muted-foreground'
+                          }`}
+                        />
+                        <h3 className="max-w-[180px] truncate text-sm font-semibold">
+                          {project.name}
+                        </h3>
+                      </div>
 
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="text-xs"
-                          onClick={() => copyProjectLink(project)}
-                        >
-                          <Copy className="w-3 h-3 mr-2" />
-                          {copiedId === project.id ? 'Copiat' : 'Copiază linkul'}
-                        </DropdownMenuItem>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
 
-                        <DropdownMenuItem
-                          className="text-destructive text-xs"
-                          onClick={() => deleteMutation.mutate(project.id)}
-                        >
-                          <Trash2 className="w-3 h-3 mr-2" />
-                          Șterge
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </CardHeader>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-xs"
+                            onClick={() => copyProjectLink(project)}
+                          >
+                            <Copy className="mr-2 h-3 w-3" />
+                            {copiedId === project.id ? 'Copiat' : 'Copiază linkul'}
+                          </DropdownMenuItem>
 
-                  <CardContent className="p-4 pt-0">
-                    {project.description && (
-                      <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2">
-                        {project.description}
-                      </p>
-                    )}
+                          <DropdownMenuItem
+                            className="text-destructive text-xs"
+                            onClick={() => deleteMutation.mutate(project.id)}
+                          >
+                            <Trash2 className="mr-2 h-3 w-3" />
+                            Șterge
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardHeader>
 
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
-                        <GitBranch className="w-2.5 h-2.5" />
-                        main
-                      </Badge>
-
-                      <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
-                        {LANG_LABELS[project.language] || project.language}
-                      </Badge>
-
-                      {project.status === 'running' && (
-                        <Badge
-                          variant="secondary"
-                          className="h-5 text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1"
-                        >
-                          <Activity className="w-2.5 h-2.5" />
-                          Running
-                        </Badge>
+                    <CardContent className="p-4 pt-0">
+                      {project.description && (
+                        <p className="mb-3 line-clamp-2 text-[11px] text-muted-foreground">
+                          {project.description}
+                        </p>
                       )}
-                    </div>
 
-                    <div className="space-y-2">
-                      <Link to={`/editor/${project.slug}`}>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="w-full h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary"
-                        >
-                          <Play className="w-3 h-3" />
-                          Deschide în Editor
-                        </Button>
-                      </Link>
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="h-5 gap-1 border-border text-[9px]">
+                          <GitBranch className="h-2.5 w-2.5" />
+                          main
+                        </Badge>
 
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {window.location.origin}/editor/{project.slug}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                        <Badge variant="outline" className="h-5 border-border text-[9px]">
+                          {LANG_LABELS[project.language] || project.language}
+                        </Badge>
+
+                        <Badge variant="outline" className="h-5 gap-1 border-border text-[9px]">
+                          <Users className="h-2.5 w-2.5" />
+                          {collaboratorCount} colaboratori
+                        </Badge>
+
+                        {project.status === 'running' && (
+                          <Badge
+                            variant="secondary"
+                            className="h-5 gap-1 border-emerald-500/20 bg-emerald-500/10 text-[9px] text-emerald-400"
+                          >
+                            <Activity className="h-2.5 w-2.5" />
+                            Running
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Link to={`/editor/${project.slug}?share=${project.share_token}`}>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 w-full gap-1.5 text-xs hover:bg-primary/10 hover:text-primary"
+                          >
+                            <Play className="h-3 w-3" />
+                            Deschide în Editor
+                          </Button>
+                        </Link>
+
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {window.location.origin}/editor/{project.slug}?share={project.share_token}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })}
           </div>
         )}
       </div>
