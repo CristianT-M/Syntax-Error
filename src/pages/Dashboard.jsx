@@ -1,36 +1,36 @@
 // @ts-nocheck
 
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Plus, Code2, Search, Play,
   MoreHorizontal, Trash2, FolderOpen, ArrowLeft,
-  GitBranch, Activity
-} from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+  GitBranch, Activity, Copy
+} from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/AuthContext';
-import AuthButtons from '../components/AuthButtons';
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/AuthContext'
+import AuthButtons from '../components/AuthButtons'
 
 const LANG_COLORS = {
   javascript: 'bg-amber-400',
@@ -40,7 +40,7 @@ const LANG_COLORS = {
   go: 'bg-cyan-400',
   cpp: 'bg-blue-500',
   java: 'bg-red-400',
-};
+}
 
 const LANG_LABELS = {
   javascript: 'JavaScript',
@@ -50,7 +50,7 @@ const LANG_LABELS = {
   go: 'Go',
   cpp: 'C++',
   java: 'Java',
-};
+}
 
 const DEFAULT_FILES = {
   javascript: {
@@ -99,20 +99,30 @@ int main() {
   }
 }`,
   },
-};
+}
+
+function generateSlug(length = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return result
+}
 
 export default function Dashboard() {
-  const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [copiedId, setCopiedId] = useState(null)
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
     language: 'javascript'
-  });
+  })
 
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { user } = useAuth()
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', user?.id],
@@ -121,15 +131,17 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
 
-      if (error) throw error;
-      return data || [];
+      if (error) throw error
+      return data || []
     },
-  });
+  })
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
+      const slug = generateSlug()
+
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -137,13 +149,24 @@ export default function Dashboard() {
           name: data.name.trim(),
           description: data.description.trim(),
           language: data.language,
+          slug,
+          is_public: true,
         })
         .select()
-        .single();
+        .single()
 
-      if (projectError) throw projectError;
+      if (projectError) throw projectError
 
-      const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript;
+      const { error: memberError } = await supabase
+        .from('project_members')
+        .insert({
+          project_id: project.id,
+          user_id: user.id,
+        })
+
+      if (memberError) throw memberError
+
+      const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript
 
       const { error: fileError } = await supabase
         .from('project_files')
@@ -153,43 +176,55 @@ export default function Dashboard() {
           language: data.language,
           content: starter.content,
           is_entry: true,
-        });
+        })
 
-      if (fileError) throw fileError;
+      if (fileError) throw fileError
 
-      return project;
+      return project
     },
     onSuccess: (project) => {
-      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] });
-      setCreateOpen(false);
-      setNewProject({ name: '', description: '', language: 'javascript' });
-      navigate(`/editor/${project.id}`);
+      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
+      setCreateOpen(false)
+      setNewProject({ name: '', description: '', language: 'javascript' })
+      navigate(`/editor/${project.slug}`)
     },
     onError: (error) => {
-      alert(error.message || 'Eroare la creare proiect.');
+      alert(error.message || 'Eroare la creare proiect.')
     },
-  });
+  })
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       const { error } = await supabase
         .from('projects')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
 
-      if (error) throw error;
+      if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
     },
     onError: (error) => {
-      alert(error.message || 'Eroare la ștergere proiect.');
+      alert(error.message || 'Eroare la ștergere proiect.')
     },
-  });
+  })
 
   const filteredProjects = projects.filter((project) =>
     project.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  )
+
+  async function copyProjectLink(project) {
+    try {
+      const link = `${window.location.origin}/editor/${project.slug}`
+      await navigator.clipboard.writeText(link)
+      setCopiedId(project.id)
+      setTimeout(() => setCopiedId(null), 1500)
+    } catch (error) {
+      console.error(error)
+      alert('Nu am putut copia linkul proiectului.')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -353,6 +388,14 @@ export default function Dashboard() {
 
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          className="text-xs"
+                          onClick={() => copyProjectLink(project)}
+                        >
+                          <Copy className="w-3 h-3 mr-2" />
+                          {copiedId === project.id ? 'Copiat' : 'Copiază linkul'}
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
                           className="text-destructive text-xs"
                           onClick={() => deleteMutation.mutate(project.id)}
                         >
@@ -370,7 +413,7 @@ export default function Dashboard() {
                       </p>
                     )}
 
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
                         <GitBranch className="w-2.5 h-2.5" />
                         main
@@ -391,16 +434,22 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    <Link to={`/editor/${project.id}`}>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="w-full h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary"
-                      >
-                        <Play className="w-3 h-3" />
-                        Deschide în Editor
-                      </Button>
-                    </Link>
+                    <div className="space-y-2">
+                      <Link to={`/editor/${project.slug}`}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="w-full h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary"
+                        >
+                          <Play className="w-3 h-3" />
+                          Deschide în Editor
+                        </Button>
+                      </Link>
+
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {window.location.origin}/editor/{project.slug}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -409,5 +458,5 @@ export default function Dashboard() {
         )}
       </div>
     </div>
-  );
+  )
 }
