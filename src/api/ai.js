@@ -13,7 +13,9 @@ export default async function handler(req, res) {
     const apiKey = process.env.OPENROUTER_API_KEY
 
     if (!apiKey) {
-      return res.status(500).json({ error: 'OPENROUTER_API_KEY nu este setată.' })
+      return res.status(500).json({
+        error: 'OPENROUTER_API_KEY nu este setată pe Vercel.',
+      })
     }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -21,7 +23,7 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://syntax-error-x5al.vercel.app',
+        'HTTP-Referer': 'https://syntax-error-edu.vercel.app',
         'X-Title': 'Syntax Error Monaco Editor',
       },
       body: JSON.stringify({
@@ -40,7 +42,16 @@ export default async function handler(req, res) {
       }),
     })
 
-    const json = await response.json()
+    const text = await response.text()
+
+    let json
+    try {
+      json = JSON.parse(text)
+    } catch {
+      return res.status(500).json({
+        error: `OpenRouter a returnat răspuns invalid: ${text.slice(0, 200)}`,
+      })
+    }
 
     if (!response.ok) {
       return res.status(response.status).json({
