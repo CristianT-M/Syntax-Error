@@ -1,7 +1,6 @@
 // @ts-nocheck
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import debounce from 'lodash.debounce'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Plus, X, Wand2, Play, Copy, Users } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
@@ -20,6 +19,21 @@ import {
   getUserCursorColor,
   touchProject
 } from '@/lib/project'
+
+function debounce(fn, wait = 300) {
+  let timeout
+
+  function debounced(...args) {
+    clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      fn(...args)
+    }, wait)
+  }
+
+  debounced.cancel = () => clearTimeout(timeout)
+
+  return debounced
+}
 
 function getExtension(name = '') {
   return name.split('.').pop()?.toLowerCase() || ''
