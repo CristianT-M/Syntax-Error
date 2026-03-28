@@ -1,32 +1,18 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import {
-  FileCode2,
-  Copy,
-  Check,
-  Maximize2,
-  Minimize2,
-  RotateCcw
-} from 'lucide-react'
+import { Copy, Check, Maximize2, Minimize2, FileCode2 } from 'lucide-react'
 
-const DEFAULT_CODE = `function greet(name) {
-  return \`Salut, \${name}!\`
-}
-
-console.log(greet("iTEC"))
-`
-
-function getLanguageFromFilename(filename = '') {
-  const ext = filename.split('.').pop()?.toLowerCase()
+function getLanguageFromFileName(fileName = '') {
+  const ext = fileName.split('.').pop()?.toLowerCase()
 
   switch (ext) {
     case 'js':
-      return 'javascript'
+    case 'mjs':
+    case 'cjs':
     case 'jsx':
       return 'javascript'
     case 'ts':
-      return 'typescript'
     case 'tsx':
       return 'typescript'
     case 'json':
@@ -43,48 +29,41 @@ function getLanguageFromFilename(filename = '') {
       return 'python'
     case 'java':
       return 'java'
-    case 'cpp':
-    case 'cc':
-    case 'cxx':
-      return 'cpp'
-    case 'c':
-      return 'c'
     case 'php':
       return 'php'
     case 'xml':
       return 'xml'
     case 'sql':
       return 'sql'
-    case 'yaml':
     case 'yml':
+    case 'yaml':
       return 'yaml'
+    case 'cpp':
+    case 'cc':
+    case 'cxx':
+      return 'cpp'
+    case 'c':
+      return 'c'
     default:
       return 'javascript'
   }
 }
 
 export default function MonacoCodeEditor({
-  /** @type {string} */
   value,
-  /** @type {(value: string) => void} */
   onChange,
   filename = 'main.js',
-  height = '70vh',
   readOnly = false,
-  theme = 'vs-dark'
+  height = '100%',
 }) {
   const editorRef = useRef(null)
-  const monacoRef = useRef(null)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  const language = useMemo(() => getLanguageFromFilename(filename), [filename])
+  const language = useMemo(() => getLanguageFromFileName(filename), [filename])
 
-  const safeValue = value ?? DEFAULT_CODE
-
-  const handleEditorDidMount = (/** @type {any} */ editor, /** @type {any} */ monaco) => {
+  const handleMount = (editor, monaco) => {
     editorRef.current = editor
-    monacoRef.current = monaco
 
     monaco.editor.defineTheme('syntax-error-theme', {
       base: 'vs-dark',
@@ -94,79 +73,73 @@ export default function MonacoCodeEditor({
         { token: 'keyword', foreground: 'C084FC' },
         { token: 'string', foreground: '34D399' },
         { token: 'number', foreground: 'F59E0B' },
-        { token: 'identifier', foreground: 'E5E7EB' }
+        { token: 'delimiter', foreground: 'CBD5E1' }
       ],
       colors: {
-        'editor.background': '#0B1020',
-        'editorLineNumber.foreground': '#475569',
-        'editorLineNumber.activeForeground': '#E2E8F0',
-        'editorCursor.foreground': '#F8FAFC',
-        'editor.selectionBackground': '#7C3AED55',
+        'editor.background': '#07111f',
+        'editor.foreground': '#e5eef9',
+        'editorLineNumber.foreground': '#5b6b83',
+        'editorLineNumber.activeForeground': '#ffffff',
+        'editorCursor.foreground': '#ffffff',
+        'editor.selectionBackground': '#7c3aed55',
         'editor.inactiveSelectionBackground': '#33415566',
-        'editor.lineHighlightBackground': '#FFFFFF08',
-        'editorIndentGuide.background1': '#1E293B',
+        'editor.lineHighlightBackground': '#ffffff08',
+        'editorIndentGuide.background1': '#1e293b',
         'editorIndentGuide.activeBackground1': '#475569'
       }
     })
 
     monaco.editor.setTheme('syntax-error-theme')
 
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+    })
+
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+      allowNonTsExtensions: true,
+      target: monaco.languages.typescript.ScriptTarget.ES2020,
+      jsx: monaco.languages.typescript.JsxEmit.React,
+    })
+
     editor.focus()
   }
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(editorRef.current?.getValue() ?? safeValue)
+      const text = editorRef.current?.getValue() ?? value ?? ''
+      await navigator.clipboard.writeText(text)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
+      setTimeout(() => setCopied(false), 1500)
     } catch (error) {
       console.error('Copy failed:', error)
     }
   }
 
-  const handleResetView = () => {
-    if (!editorRef.current) return
-
-    editorRef.current.updateOptions({
-      fontSize: 14,
-      minimap: { enabled: false }
-    })
-    editorRef.current.layout()
-    editorRef.current.focus()
-  }
-
-  useEffect(() => {
-    const onResize = () => {
-      editorRef.current?.layout()
-    }
-
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
   return (
     <div
       className={`overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl backdrop-blur-xl ${
-        isFullscreen ? 'fixed inset-4 z-[9998]' : 'relative w-full'
+        isFullscreen ? 'fixed inset-4 z-[9999]' : 'relative w-full'
       }`}
+      style={{ height: isFullscreen ? 'auto' : height }}
     >
       <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 to-cyan-500 shadow-lg">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 via-purple-500 to-cyan-500 shadow-lg">
             <FileCode2 className="h-5 w-5 text-white" />
           </div>
 
           <div>
             <p className="text-sm font-semibold text-white">{filename}</p>
-            <p className="text-xs text-slate-400">{language}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-400">{language}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleCopy}
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition hover:bg-white/10"
-            type="button"
           >
             <span className="flex items-center gap-2">
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -175,18 +148,9 @@ export default function MonacoCodeEditor({
           </button>
 
           <button
-            onClick={handleResetView}
-            className="rounded-xl border border-white/10 bg-white/5 p-2 text-white transition hover:bg-white/10"
             type="button"
-            title="Reset view"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-
-          <button
             onClick={() => setIsFullscreen(prev => !prev)}
             className="rounded-xl border border-white/10 bg-white/5 p-2 text-white transition hover:bg-white/10"
-            type="button"
             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
             {isFullscreen ? (
@@ -198,36 +162,42 @@ export default function MonacoCodeEditor({
         </div>
       </div>
 
-      <div className="w-full bg-[#0B1020]" style={{ height: isFullscreen ? 'calc(100vh - 88px)' : height }}>
+      <div
+        className="w-full"
+        style={{ height: isFullscreen ? 'calc(100vh - 88px)' : '100%' }}
+      >
         <Editor
           height="100%"
           language={language}
-          value={safeValue}
+          value={value ?? ''}
           onChange={(nextValue) => onChange?.(nextValue ?? '')}
-          onMount={handleEditorDidMount}
-          theme={theme}
+          onMount={handleMount}
+          theme="syntax-error-theme"
           options={{
             readOnly,
             automaticLayout: true,
             minimap: { enabled: false },
-            fontSize: 14,
+            fontSize: 15,
             fontLigatures: true,
             wordWrap: 'on',
             smoothScrolling: true,
+            mouseWheelZoom: true,
             cursorBlinking: 'smooth',
             cursorSmoothCaretAnimation: 'on',
-            padding: { top: 16, bottom: 16 },
             roundedSelection: true,
             scrollBeyondLastLine: false,
+            renderWhitespace: 'selection',
+            tabSize: 2,
+            padding: { top: 14, bottom: 14 },
             bracketPairColorization: { enabled: true },
             guides: {
               indentation: true,
-              bracketPairs: true
+              bracketPairs: true,
             },
             suggest: {
               showKeywords: true,
-              showSnippets: true
-            }
+              showSnippets: true,
+            },
           }}
         />
       </div>
