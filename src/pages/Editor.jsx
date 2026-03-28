@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Plus, X, Wand2, Play, Copy } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
@@ -6,7 +6,7 @@ import { starterFiles } from '@/lib/editor-defaults'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase'
 import ProjectChat from '@/components/ProjectChat'
- 
+
 function getExtension(name = '') {
   return name.split('.').pop()?.toLowerCase() || ''
 }
@@ -22,6 +22,10 @@ function isCssFile(name = '') {
 function isJsFile(name = '') {
   const ext = getExtension(name)
   return ext === 'js' || ext === 'mjs' || ext === 'cjs'
+}
+
+function isUUID(value = '') {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 /**
@@ -160,40 +164,47 @@ export default function Editor() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-  if (!user || !projectId) {
-    setProjectLoading(false)
-    return
-  }
-
-  async function loadProject() {
-    try {
-      setProjectLoading(true)
-      setProjectError('')
-
-      const { data: foundProject, error } = await supabase
-        .from('projects')
-        .select('*')
-        .or(`id.eq.${projectId},slug.eq.${projectId}`)
-        .single()
-
-      if (error || !foundProject) {
-        setProjectError('Proiectul nu există.')
-        setProject(null)
-        return
-      }
-
-      setProject(foundProject)
-    } catch (error) {
-      console.error(error)
-      setProjectError('Nu am putut încărca proiectul.')
-      setProject(null)
-    } finally {
+    if (!user || !projectId) {
       setProjectLoading(false)
+      return
     }
-  }
 
-  loadProject()
-}, [projectId, user])
+    async function loadProject() {
+      try {
+        setProjectLoading(true)
+        setProjectError('')
+
+        let query = supabase
+          .from('projects')
+          .select('*')
+
+        if (isUUID(projectId)) {
+          query = query.eq('id', projectId)
+        } else {
+          query = query.eq('slug', projectId)
+        }
+
+        const { data: foundProject, error } = await query.single()
+
+        if (error || !foundProject) {
+          console.error('Project load error:', error)
+          setProjectError('Proiectul nu există.')
+          setProject(null)
+          return
+        }
+
+        setProject(foundProject)
+      } catch (error) {
+        console.error(error)
+        setProjectError('Nu am putut încărca proiectul.')
+        setProject(null)
+      } finally {
+        setProjectLoading(false)
+      }
+    }
+
+    loadProject()
+  }, [projectId, user])
 
   const activeFile = useMemo(() => {
     return files.find((file) => file.id === activeFileId) || files[0]
@@ -208,11 +219,11 @@ export default function Editor() {
     setFiles(
       /** @param {any[]} prev */
       (prev) =>
-      prev.map((file) =>
-        file.id === activeFileId
-          ? { ...file, content: nextContent ?? '' }
-          : file
-      )
+        prev.map((file) =>
+          file.id === activeFileId
+            ? { ...file, content: nextContent ?? '' }
+            : file
+        )
     )
   }
 
@@ -252,7 +263,9 @@ export default function Editor() {
 
     const nextFiles = files.filter(
       /** @param {any} file */
-      (file) => file.id !== fileId)
+      (file) => file.id !== fileId
+    )
+
     setFiles(nextFiles)
 
     if (activeFileId === fileId) {
