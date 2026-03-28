@@ -56,29 +56,52 @@ export function getUserDisplayName(user, profile) {
  * Creează sau actualizează profilul userului
  * @param {any} user
  */
+/**
+ * Creează sau actualizează profilul userului
+ * @param {any} user
+ */
 export async function ensureProfile(user) {
   if (!user?.id) return null
 
+  const { data: existing, error: existingError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
   const username =
+    existing?.username ||
     user.user_metadata?.username ||
     user.email?.split('@')[0] ||
     'User'
 
-  const cursorColor = getUserCursorColor(user.id)
+  const cursorColor = existing?.cursor_color || getUserCursorColor(user.id)
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        cursor_color: cursorColor,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
 
   const { data, error } = await supabase
     .from('profiles')
-    .upsert(
-      {
-        id: user.id,
-        username,
-        cursor_color: cursorColor,
-        updated_at: new Date().toISOString()
-      },
-      {
-        onConflict: 'id'
-      }
-    )
+    .insert({
+      id: user.id,
+      username,
+      cursor_color: cursorColor,
+      updated_at: new Date().toISOString()
+    })
     .select()
     .single()
 
@@ -120,16 +143,11 @@ export async function createProject({
 
   const { error: memberError } = await supabase
     .from('project_members')
-    .upsert(
-      {
-        project_id: project.id,
-        user_id: ownerId,
-        role: 'owner'
-      },
-      {
-        onConflict: 'project_id,user_id'
-      }
-    )
+    .insert({
+      project_id: project.id,
+      user_id: ownerId,
+      role: 'owner'
+    })
 
   if (memberError) throw memberError
 
@@ -152,25 +170,37 @@ export async function getProjectBySlug(slug) {
 
 /**
  * Auto-adaugă userul ca membru în proiect
+ * Nu suprascrie owner-ul dacă există deja
  * @param {string} projectId
  * @param {string} userId
  * @param {'owner'|'editor'|'viewer'} [role]
  */
 export async function ensureProjectMembership(projectId, userId, role = 'editor') {
-  const { error } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('project_members')
-    .upsert(
-      {
-        project_id: projectId,
-        user_id: userId,
-        role
-      },
-      {
-        onConflict: 'project_id,user_id'
-      }
-    )
+    .select('id, role')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
+  if (existing) {
+    return existing
+  }
+
+  const { data, error } = await supabase
+    .from('project_members')
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      role
+    })
+    .select()
+    .single()
 
   if (error) throw error
+  return data
 }
 
 /**
@@ -178,25 +208,43 @@ export async function ensureProjectMembership(projectId, userId, role = 'editor'
  * @param {string} projectId
  */
 export async function getProjectMembers(projectId) {
-  const { data, error } = await supabase
+  const { data: members, error: membersError } = await supabase
     .from('project_members')
     .select(`
       id,
       project_id,
       user_id,
       role,
-      joined_at,
-      profiles:user_id (
-        username,
-        avatar_url,
-        cursor_color
-      )
+      joined_at
     `)
     .eq('project_id', projectId)
     .order('joined_at', { ascending: true })
 
-  if (error) throw error
-  return data || []
+  if (membersError) throw membersError
+  if (!members || members.length === 0) return []
+
+  const userIds = members.map((member) => member.user_id)
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      username,
+      avatar_url,
+      cursor_color
+    `)
+    .in('id', userIds)
+
+  if (profilesError) throw profilesError
+
+  const profilesMap = new Map(
+    (profiles || []).map((profile) => [profile.id, profile])
+  )
+
+  return members.map((member) => ({
+    ...member,
+    profiles: profilesMap.get(member.user_id) || null
+  }))
 }
 
 /**
@@ -348,25 +396,43 @@ export async function createProjectSnapshot({ projectId, fileId = null, content 
  * @param {string} projectId
  */
 export async function getProjectMessages(projectId) {
-  const { data, error } = await supabase
+  const { data: messages, error: messagesError } = await supabase
     .from('chat_messages')
     .select(`
       id,
       project_id,
       user_id,
       content,
-      created_at,
-      profiles:user_id (
-        username,
-        avatar_url,
-        cursor_color
-      )
+      created_at
     `)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
 
-  if (error) throw error
-  return data || []
+  if (messagesError) throw messagesError
+  if (!messages || messages.length === 0) return []
+
+  const userIds = [...new Set(messages.map((message) => message.user_id))]
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      username,
+      avatar_url,
+      cursor_color
+    `)
+    .in('id', userIds)
+
+  if (profilesError) throw profilesError
+
+  const profilesMap = new Map(
+    (profiles || []).map((profile) => [profile.id, profile])
+  )
+
+  return messages.map((message) => ({
+    ...message,
+    profiles: profilesMap.get(message.user_id) || null
+  }))
 }
 
 /**

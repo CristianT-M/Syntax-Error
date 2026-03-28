@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   try {
     const { prompt, code, filename } = req.body || {}
 
-    if (!prompt || !code) {
+    if (!prompt || typeof code !== 'string') {
       return res.status(400).json({ error: 'Lipsește prompt sau code.' })
     }
 
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
     if (!apiKey) {
       return res.status(500).json({
-        error: 'OPENROUTER_API_KEY nu este setată pe Vercel.',
+        error: 'OPENROUTER_API_KEY nu este setată.',
       })
     }
 
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       json = JSON.parse(text)
     } catch {
       return res.status(500).json({
-        error: `OpenRouter a returnat răspuns invalid: ${text.slice(0, 200)}`,
+        error: `OpenRouter a returnat răspuns invalid: ${text.slice(0, 300)}`,
       })
     }
 
@@ -59,7 +59,13 @@ export default async function handler(req, res) {
       })
     }
 
-    const newCode = json?.choices?.[0]?.message?.content || ''
+    const newCode = json?.choices?.[0]?.message?.content
+
+    if (!newCode || typeof newCode !== 'string') {
+      return res.status(500).json({
+        error: 'OpenRouter nu a returnat cod valid.',
+      })
+    }
 
     return res.status(200).json({ code: newCode })
   } catch (error) {

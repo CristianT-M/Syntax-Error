@@ -530,67 +530,75 @@ export default function Editor() {
   }
 
   async function askAI() {
-    if (!activeFile) {
-      alert('Nu există fișier activ.')
-      return
-    }
-
-    if (!aiPrompt.trim()) {
-      alert('Scrie un prompt mai întâi.')
-      return
-    }
-
-    try {
-      setIsLoadingAI(true)
-
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: aiPrompt,
-          code: activeFile.content,
-          filename: activeFile.name,
-          projectId: project?.id
-        }),
-      })
-
-      const rawText = await res.text()
-
-      let data
-      try {
-        data = JSON.parse(rawText)
-      } catch {
-        throw new Error(rawText || 'Răspuns invalid de la server.')
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || 'AI request failed')
-      }
-
-      const newCode = data.code ?? ''
-
-      setFiles((prev) =>
-        prev.map((file) =>
-          file.id === activeFile.id
-            ? { ...file, content: newCode }
-            : file
-        )
-      )
-
-      await updateProjectFile({
-        fileId: activeFile.id,
-        content: newCode,
-        userId: user.id
-      })
-
-      await touchProject(project.id)
-      setAiPrompt('')
-    } catch (error) {
-      alert((error instanceof Error ? error.message : String(error)) || 'A apărut o eroare la AI.')
-    } finally {
-      setIsLoadingAI(false)
-    }
+  if (!activeFile) {
+    alert('Nu există fișier activ.')
+    return
   }
+
+  if (!aiPrompt.trim()) {
+    alert('Scrie un prompt mai întâi.')
+    return
+  }
+
+  try {
+    setIsLoadingAI(true)
+
+    const res = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: aiPrompt.trim(),
+        code: activeFile.content ?? '',
+        filename: activeFile.name,
+        projectId: project?.id,
+      }),
+    })
+
+    const contentType = res.headers.get('content-type') || ''
+    let data
+
+    if (contentType.includes('application/json')) {
+      data = await res.json()
+    } else {
+      const text = await res.text()
+      throw new Error(text || 'Răspuns invalid de la server.')
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.error || 'AI request failed')
+    }
+
+    if (!data || typeof data.code !== 'string') {
+      throw new Error('Serverul nu a returnat cod valid.')
+    }
+
+    const newCode = data.code
+
+    setFiles((prev) =>
+      prev.map((file) =>
+        file.id === activeFile.id
+          ? { ...file, content: newCode }
+          : file
+      )
+    )
+
+    await updateProjectFile({
+      fileId: activeFile.id,
+      content: newCode,
+      userId: user.id,
+    })
+
+    await touchProject(project.id)
+    setAiPrompt('')
+  } catch (error) {
+    console.error('AI error:', error)
+    alert(error?.message || 'A apărut o eroare la AI.')
+  } finally {
+    setIsLoadingAI(false)
+  }
+}
 
   const visibleRemoteCursors = remoteCursors.filter(
     (cursor) => cursor.userId !== user?.id && cursor.fileId === activeFile?.id
