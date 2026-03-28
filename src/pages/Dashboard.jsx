@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Plus, Code2, Search, Play,
@@ -28,7 +28,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../api/client';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 import AuthButtons from '../components/AuthButtons';
 
 const LANG_COLORS = {
@@ -38,6 +39,7 @@ const LANG_COLORS = {
   typescript: 'bg-blue-400',
   go: 'bg-cyan-400',
   cpp: 'bg-blue-500',
+  java: 'bg-red-400',
 };
 
 const LANG_LABELS = {
@@ -47,30 +49,121 @@ const LANG_LABELS = {
   typescript: 'TypeScript',
   go: 'Go',
   cpp: 'C++',
+  java: 'Java',
+};
+
+const DEFAULT_FILES = {
+  javascript: {
+    name: 'index.js',
+    content: 'console.log("Hello from iTECify!");',
+  },
+  python: {
+    name: 'main.py',
+    content: 'print("Hello from iTECify!")',
+  },
+  rust: {
+    name: 'main.rs',
+    content: `fn main() {
+    println!("Hello from iTECify!");
+}`,
+  },
+  typescript: {
+    name: 'index.ts',
+    content: 'console.log("Hello from iTECify!");',
+  },
+  go: {
+    name: 'main.go',
+    content: `package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello from iTECify!")
+}`,
+  },
+  cpp: {
+    name: 'main.cpp',
+    content: `#include <iostream>
+using namespace std;
+
+int main() {
+  cout << "Hello from iTECify!" << endl;
+  return 0;
+}`,
+  },
+  java: {
+    name: 'Main.java',
+    content: `public class Main {
+  public static void main(String[] args) {
+    System.out.println("Hello from iTECify!");
+  }
+}`,
+  },
 };
 
 export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [newRoom, setNewRoom] = useState({
+  const [newProject, setNewProject] = useState({
     name: '',
     description: '',
     language: 'javascript'
   });
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const { data: rooms = [], isLoading } = useQuery({
-    queryKey: ['rooms'],
-    queryFn: () => apiClient.entities.Room.list(),
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ['projects', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => apiClient.entities.Room.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: async (data) => {
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          owner_id: user.id,
+          name: data.name.trim(),
+          description: data.description.trim(),
+          language: data.language,
+        })
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      const starter = DEFAULT_FILES[data.language] || DEFAULT_FILES.javascript;
+
+      const { error: fileError } = await supabase
+        .from('project_files')
+        .insert({
+          project_id: project.id,
+          name: starter.name,
+          language: data.language,
+          content: starter.content,
+          is_entry: true,
+        });
+
+      if (fileError) throw fileError;
+
+      return project;
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] });
       setCreateOpen(false);
-      setNewRoom({ name: '', description: '', language: 'javascript' });
+      setNewProject({ name: '', description: '', language: 'javascript' });
+      navigate(`/editor/${project.id}`);
     },
     onError: (error) => {
       alert(error.message || 'Eroare la creare proiect.');
@@ -78,17 +171,24 @@ export default function Dashboard() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => apiClient.entities.Room.delete(id),
+    mutationFn: async (id) => {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', user?.id] });
     },
     onError: (error) => {
       alert(error.message || 'Eroare la ștergere proiect.');
     },
   });
 
-  const filteredRooms = rooms.filter((room) =>
-    room.name?.toLowerCase().includes(search.toLowerCase())
+  const filteredProjects = projects.filter((project) =>
+    project.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -139,8 +239,8 @@ export default function Dashboard() {
                     <Label className="text-xs">Nume proiect</Label>
                     <Input
                       placeholder="Ex: iTEC API Backend"
-                      value={newRoom.name}
-                      onChange={(e) => setNewRoom({ ...newRoom, name: e.target.value })}
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                       className="bg-secondary/50"
                     />
                   </div>
@@ -149,8 +249,8 @@ export default function Dashboard() {
                     <Label className="text-xs">Descriere</Label>
                     <Input
                       placeholder="O scurtă descriere..."
-                      value={newRoom.description}
-                      onChange={(e) => setNewRoom({ ...newRoom, description: e.target.value })}
+                      value={newProject.description}
+                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                       className="bg-secondary/50"
                     />
                   </div>
@@ -158,8 +258,8 @@ export default function Dashboard() {
                   <div className="space-y-2">
                     <Label className="text-xs">Limbaj principal</Label>
                     <Select
-                      value={newRoom.language}
-                      onValueChange={(value) => setNewRoom({ ...newRoom, language: value })}
+                      value={newProject.language}
+                      onValueChange={(value) => setNewProject({ ...newProject, language: value })}
                     >
                       <SelectTrigger className="bg-secondary/50">
                         <SelectValue />
@@ -176,8 +276,8 @@ export default function Dashboard() {
 
                   <Button
                     className="w-full bg-primary hover:bg-primary/90"
-                    onClick={() => createMutation.mutate(newRoom)}
-                    disabled={!newRoom.name || createMutation.isPending}
+                    onClick={() => createMutation.mutate(newProject)}
+                    disabled={!newProject.name.trim() || createMutation.isPending}
                   >
                     {createMutation.isPending ? 'Se creează...' : 'Creează Proiect'}
                   </Button>
@@ -204,7 +304,7 @@ export default function Dashboard() {
               <div key={i} className="h-40 rounded-xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
-        ) : filteredRooms.length === 0 ? (
+        ) : filteredProjects.length === 0 ? (
           <div className="text-center py-20">
             <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
             <h3 className="font-medium text-muted-foreground mb-1">
@@ -226,9 +326,9 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredRooms.map((room, i) => (
+            {filteredProjects.map((project, i) => (
               <motion.div
-                key={room.id}
+                key={project.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
@@ -236,8 +336,8 @@ export default function Dashboard() {
                 <Card className="bg-card/60 border-border hover:border-primary/30 transition-all group overflow-hidden">
                   <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${LANG_COLORS[room.language] || 'bg-muted-foreground'}`} />
-                      <h3 className="font-semibold text-sm truncate max-w-[180px]">{room.name}</h3>
+                      <div className={`w-2.5 h-2.5 rounded-full ${LANG_COLORS[project.language] || 'bg-muted-foreground'}`} />
+                      <h3 className="font-semibold text-sm truncate max-w-[180px]">{project.name}</h3>
                     </div>
 
                     <DropdownMenu>
@@ -254,7 +354,7 @@ export default function Dashboard() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           className="text-destructive text-xs"
-                          onClick={() => deleteMutation.mutate(room.id)}
+                          onClick={() => deleteMutation.mutate(project.id)}
                         >
                           <Trash2 className="w-3 h-3 mr-2" />
                           Șterge
@@ -264,9 +364,9 @@ export default function Dashboard() {
                   </CardHeader>
 
                   <CardContent className="p-4 pt-0">
-                    {room.description && (
+                    {project.description && (
                       <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2">
-                        {room.description}
+                        {project.description}
                       </p>
                     )}
 
@@ -277,10 +377,10 @@ export default function Dashboard() {
                       </Badge>
 
                       <Badge variant="outline" className="h-5 text-[9px] border-border gap-1">
-                        {LANG_LABELS[room.language] || room.language}
+                        {LANG_LABELS[project.language] || project.language}
                       </Badge>
 
-                      {room.status === 'running' && (
+                      {project.status === 'running' && (
                         <Badge
                           variant="secondary"
                           className="h-5 text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1"
@@ -291,7 +391,7 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    <Link to={`/editor/${room.id}`}>
+                    <Link to={`/editor/${project.id}`}>
                       <Button
                         size="sm"
                         variant="secondary"

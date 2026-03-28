@@ -31,7 +31,7 @@ const AppRoutes = () => {
       />
 
       <Route
-        path="/editor/:roomId"
+        path="/editor/:projectId"
         element={
           <ProtectedRoute>
             <Editor />
