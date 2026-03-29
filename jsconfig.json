@@ -15,11 +15,18 @@
     "resolveJsonModule": true,
     "types": []
   },
-<<<<<<< HEAD
-  "include": ["src/components/**/*.jsx", "src/components/**/*.js", "src/pages/**/*.jsx", "src/Layout.jsx"],
-  "exclude": ["node_modules", "dist", "src/vite-plugins", "src/api", "src/lib"]
-=======
-  "include": ["src/components/**/*.js", "src/pages/**/*.jsx", "src/Layout.jsx"],
-  "exclude": ["node_modules", "dist", "src/vite-plugins", "src/components/ui", "src/api", "src/lib"]
->>>>>>> 31c57fe (Initial commit)
+  "include": [
+    "src/components/**/*.jsx",
+    "src/components/**/*.js",
+    "src/pages/**/*.jsx",
+    "src/Layout.jsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/vite-plugins",
+    "src/components/ui",
+    "src/api",
+    "src/lib"
+  ]
 } 

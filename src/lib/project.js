@@ -47,6 +47,7 @@ export async function updateProjectFile({ fileId, content, userId }) {
 
 export async function touchProject(projectId) {
   const { error } = await supabase
+  
     .from('projects')
     .update({
       last_activity_at: new Date().toISOString(),

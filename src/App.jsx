@@ -1,43 +1,42 @@
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClientInstance } from '@/lib/query-client'
+import { AuthProvider, useAuth } from '@/lib/AuthContext'
+import { Toaster } from '@/components/ui/toaster'
+
+import Landing from '@/pages/Landing'
+import Editor from '@/pages/Editor'
+import Dashboard from '@/pages/Dashboard'
+import Auth from '@/pages/Auth'
+import PageNotFound from '@/lib/PageNotFound'
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth()
 
   if (loading) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-background text-foreground">
-        <div className="rounded-2xl border border-border bg-card px-6 py-4 text-sm text-muted-foreground">
-          Loading...
-        </div>
-      </div>
-    )
+    return <div className="p-6">Loading...</div>
   }
 
-  return user ? <Navigate to="/dashboard" replace /> : children
+  return user ? children : <Navigate to="/auth" replace />
 }
-
+<Route
+  path="/editor/:slug"
+  element={
+    <ProtectedRoute>
+      <Editor />
+    </ProtectedRoute>
+  }
+/>
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route
-        path="/auth"
-        element={
-          <GuestRoute>
-            <Auth />
-          </GuestRoute>
-        }
-      />
+      <Route path="/auth" element={<Auth />} />
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
             <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quick-create"
-        element={
-          <ProtectedRoute>
-            <QuickCreateEditor />
           </ProtectedRoute>
         }
       />
@@ -56,15 +55,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <QueryClientProvider client={queryClientInstance}>
-        <AuthProvider>
-          <Router>
-            <AppRoutes />
-            <Toaster richColors position="top-right" />
-          </Router>
-        </AuthProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClientInstance}>
+      <AuthProvider>
+        <Router>
+          <AppRoutes />
+          <Toaster />
+        </Router>
+      </AuthProvider>
+    </QueryClientProvider>
   )
 }
