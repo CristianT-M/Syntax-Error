@@ -1,16 +1,12 @@
 import { supabase } from '@/lib/supabase'
 
-  if (error) throw error
-  return data || []
-}
-
 export async function createProjectFile({
   projectId,
   name,
   language,
   content = '',
   isEntry = false,
-  updatedBy = null,
+  updatedBy = null
 }) {
   const { data, error } = await supabase
     .from('project_files')

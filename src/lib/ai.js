@@ -1,64 +1,103 @@
-function detectLanguage(fileName = 'file.js') {
-      return 'css'
-    case 'js':
-    case 'jsx':
-      return 'javascript'
-    case 'ts':
-    case 'tsx':
-      return 'typescript'
-    case 'json':
-      return 'json'
-    case 'py':
-      return 'python'
-    case 'java':
-      return 'java'
-    case 'cpp':
-    case 'cc':
-    case 'cxx':
-    case 'c':
-      return 'cpp'
-    default:
-      return 'text'
-  }
+function stripCodeFences(value = '') {
+  return String(value)
+    .replace(/^```[\w-]*\n?/i, '')
+    .replace(/\n?```$/i, '')
+    .trim()
 }
 
-function buildPatch({ language, filename, prompt }) {
-  const cleanPrompt = (prompt || '').trim()
-
-  if (!cleanPrompt) {
-    return '// AI: descrie ce vrei să modifici și apasă din nou.\n'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed.' })
   }
 
-  if (language === 'html') {
-    return `\n<!-- AI BLOCK START -->\n<section class="ai-generated-block">\n  <h2>AI suggestion</h2>\n  <p>${cleanPrompt}</p>\n</section>\n<!-- AI BLOCK END -->\n`
-  }
+  try {
+    const { prompt, code, filename, language } = req.body || {}
 
-  if (language === 'css') {
-    return `\n/* AI BLOCK START */\n.ai-generated-block {\n  border: 1px dashed currentColor;\n  padding: 1rem;\n  border-radius: 1rem;\n}\n/* AI TASK: ${cleanPrompt} */\n/* AI BLOCK END */\n`
-  }
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Missing prompt.' })
+    }
 
-  if (language === 'python') {
-    return `\n# AI BLOCK START\n# TODO: ${cleanPrompt}\nprint("AI suggestion for ${filename}")\n# AI BLOCK END\n`
-  }
+    if (typeof code !== 'string') {
+      return res.status(400).json({ error: 'Missing code.' })
+    }
 
-  if (language === 'java') {
-    return `\n// AI BLOCK START\n// TODO: ${cleanPrompt}\n// AI BLOCK END\n`
-  }
+    const apiKey = process.env.OPENROUTER_API_KEY
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OPENROUTER_API_KEY is not set.' })
+    }
 
-  if (language === 'cpp') {
-    return `\n// AI BLOCK START\n// TODO: ${cleanPrompt}\n// This section was suggested by AI\n// AI BLOCK END\n`
-  }
+    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
 
-  return `\n// AI BLOCK START\n// TODO: ${cleanPrompt}\n// Suggested for ${filename}\n// AI BLOCK END\n`
-}
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': req.headers.origin || 'http://localhost:5173',
+        'X-Title': 'iTECify AI Assistant',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a coding assistant inside a collaborative code editor. Return only JSON: {"code":"<full updated file>","summary":"<short sentence>"}. Do not wrap in markdown fences.',
+          },
+          {
+            role: 'user',
+            content: [
+              `Filename: ${filename || 'unknown'}`,
+              `Language: ${language || 'unknown'}`,
+              `Instruction: ${prompt}`,
+              'Current file contents:',
+              code,
+            ].join('\n\n'),
+          },
+        ],
+      }),
+    })
 
-export async function generateAiSuggestion({ prompt, fileName, content }) {
-  const language = detectLanguage(fileName)
-  const patch = buildPatch({ language, filename: fileName, prompt })
+    const rawText = await response.text()
 
-  return {
-    language,
-    patch,
-    nextContent: `${content || ''}${patch}`,
+    let json
+    try {
+      json = JSON.parse(rawText)
+    } catch {
+      return res.status(500).json({
+        error: `Invalid AI provider response: ${rawText.slice(0, 300)}`,
+      })
+    }
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: json?.error?.message || 'AI provider error.',
+      })
+    }
+
+    const content = json?.choices?.[0]?.message?.content
+    if (!content || typeof content !== 'string') {
+      return res.status(500).json({ error: 'AI did not return valid content.' })
+    }
+
+    let parsed
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      return res.status(200).json({
+        code: stripCodeFences(content),
+        summary: 'AI generated an updated version of the file.',
+      })
+    }
+
+    return res.status(200).json({
+      code: stripCodeFences(parsed?.code || ''),
+      summary: parsed?.summary || 'AI generated an updated version of the file.',
+    })
+  } catch (error) {
+    return res.status(500).json({
+      error: error?.message || 'Server error.',
+    })
   }
 }
