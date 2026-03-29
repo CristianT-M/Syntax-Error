@@ -1,41 +1,22 @@
-// @ts-nocheck
-
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { Plus, X, Wand2, Play, Copy, Users } from 'lucide-react'
+import debounce from 'lodash.debounce'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Copy, Plus, Play, Save, Users, Wand2 } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
+import ProjectChat from '@/components/ProjectChat'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase'
-import ProjectChat from '@/components/ProjectChat'
 import {
+  createProjectFile,
   ensureProfile,
   ensureProjectMembership,
   getProjectBySlug,
   getProjectFiles,
   getProjectMembers,
-  createProjectFile,
-  updateProjectFile,
-  deleteProjectFile,
   getUserCursorColor,
-  touchProject
+  touchProject,
+  updateProjectFile,
 } from '@/lib/project'
-
-function debounce(fn, wait = 300) {
-  let timeout
-
-  function debounced(...args) {
-    clearTimeout(timeout)
-    timeout = setTimeout(() => {
-      fn(...args)
-    }, wait)
-  }
-
-  debounced.cancel = () => {
-    clearTimeout(timeout)
-  }
-
-  return debounced
-}
 
 function getExtension(name = '') {
   return name.split('.').pop()?.toLowerCase() || ''
@@ -54,474 +35,445 @@ function isJsFile(name = '') {
   return ext === 'js' || ext === 'mjs' || ext === 'cjs'
 }
 
+function getLanguageFromFilename(name = '') {
+  const ext = getExtension(name)
+
+  switch (ext) {
+    case 'html':
+      return 'html'
+    case 'css':
+      return 'css'
+    case 'js':
+    case 'mjs':
+    case 'cjs':
+    case 'jsx':
+      return 'javascript'
+    case 'ts':
+    case 'tsx':
+      return 'typescript'
+    case 'json':
+      return 'json'
+    case 'py':
+      return 'python'
+    case 'java':
+      return 'java'
+    case 'cpp':
+    case 'c':
+      return 'cpp'
+    default:
+      return 'javascript'
+  }
+}
+
 /**
  * @param {any[]} files
  */
 function buildPreviewDocument(files) {
-  const htmlFiles = files.filter((file) => isHtmlFile(file.name))
-  const cssFiles = files.filter((file) => isCssFile(file.name))
-  const jsFiles = files.filter((file) => isJsFile(file.name))
+  const htmlFiles = files.filter(
+    /** @param {any} file */
+    (file) => isHtmlFile(file.name)
+  )
+  const cssFiles = files.filter(
+    /** @param {any} file */
+    (file) => isCssFile(file.name)
+  )
+  const jsFiles = files.filter(
+    /** @param {any} file */
+    (file) => isJsFile(file.name)
+  )
 
   const chosenHtml =
-    htmlFiles.find((file) => file.name.toLowerCase() === 'index.html') ||
-    htmlFiles[0]
+    htmlFiles.find((file) => file.name.toLowerCase() === 'index.html') || htmlFiles[0]
 
   if (!chosenHtml) {
-    return `<!DOCTYPE html>
-<html lang="ro">
-<head>
-  <meta charset="UTF-8" />
-  <title>Preview</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0b1220;
-      color: white;
-      display: grid;
-      place-items: center;
-      min-height: 100vh;
-    }
-    .box {
-      text-align: center;
-      padding: 24px;
-    }
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h1>Nu există fișier HTML</h1>
-    <p>Creează un fișier .html ca să meargă preview-ul.</p>
-  </div>
-</body>
-</html>`
+    return `
+      <html>
+        <body style="background:#07111f;color:white;font-family:Inter,Arial,sans-serif;padding:24px;">
+          <h1>Nu există fișier HTML</h1>
+          <p>Creează un fișier .html ca să meargă preview-ul.</p>
+        </body>
+      </html>
+    `
   }
 
   let html = chosenHtml.content || ''
-
-  const allCss = cssFiles.map((file) => file.content || '').join('\n\n')
-  const allJs = jsFiles.map((file) => file.content || '').join('\n\n')
+  const allCss = cssFiles
+    .map(
+      /** @param {any} file */
+      (file) => file.content || ''
+    )
+    .join('\n\n')
+  const allJs = jsFiles
+    .map(
+      /** @param {any} file */
+      (file) => file.content || ''
+    )
+    .join('\n\n')
 
   html = html.replace(/<link[^>]*href=["'][^"']+\.css["'][^>]*>/gi, '')
   html = html.replace(/<script[^>]*src=["'][^"']+\.js["'][^>]*><\/script>/gi, '')
 
   if (allCss.trim()) {
-    if (html.includes('</head>')) {
-      html = html.replace('</head>', `<style>\n${allCss}\n</style>\n</head>`)
-    } else {
-      html = `<style>\n${allCss}\n</style>\n${html}`
-    }
+    if (html.includes('</head>')) html = html.replace('</head>', `<style>${allCss}</style></head>`)
+    else html = `<style>${allCss}</style>${html}`
   }
 
   if (allJs.trim()) {
-    if (html.includes('</body>')) {
-      html = html.replace('</body>', `<script>\n${allJs}\n<\/script>\n</body>`)
-    } else {
-      html = `${html}\n<script>\n${allJs}\n<\/script>`
-    }
+    if (html.includes('</body>')) html = html.replace('</body>', `<script>${allJs}</script></body>`)
+    else html = `${html}<script>${allJs}</script>`
   }
 
   return html
 }
 
-/**
- * @param {string} type
- * @param {string} fileName
- */
-function makeStarterContent(type, fileName) {
-  switch (type) {
-    case 'html':
-      return `<!DOCTYPE html>
-<html lang="ro">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${fileName}</title>
-</head>
-<body>
-
-</body>
-</html>`
-    case 'css':
-      return `body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-}`
-    case 'js':
-      return `console.log('Salut din ${fileName}')`
-    case 'json':
-      return `{
-  "name": "${fileName}"
-}`
-    case 'md':
-      return `# ${fileName}`
-    case 'py':
-      return `print("Salut din ${fileName}")`
-    case 'cpp':
-      return `#include <iostream>
-
-int main() {
-  std::cout << "Salut din ${fileName}" << std::endl;
-  return 0;
-}`
-    default:
-      return ''
-  }
-}
-
 export default function Editor() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const auth = useAuth()
   const user = auth?.user
 
   /** @type {[any, Function]} */
   const [project, setProject] = useState(null)
-  const [projectLoading, setProjectLoading] = useState(true)
-  const [projectError, setProjectError] = useState('')
-
   /** @type {[any[], Function]} */
   const [files, setFiles] = useState([])
   const [activeFileId, setActiveFileId] = useState(null)
-  const [previewDoc, setPreviewDoc] = useState('')
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [isLoadingAI, setIsLoadingAI] = useState(false)
-  const [newFileName, setNewFileName] = useState('')
-  const [newFileType, setNewFileType] = useState('js')
-  const [copied, setCopied] = useState(false)
-
+  const [preview, setPreview] = useState('')
   /** @type {[any[], Function]} */
   const [collaborators, setCollaborators] = useState([])
   /** @type {[any[], Function]} */
   const [remoteCursors, setRemoteCursors] = useState([])
+  const [newFileName, setNewFileName] = useState('')
+  const [newFileLanguage, setNewFileLanguage] = useState('javascript')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isCreatingFile, setIsCreatingFile] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const fileChannelRef = useRef(null)
+  /** @type {React.MutableRefObject<any>} */
   const presenceChannelRef = useRef(null)
+  /** @type {React.MutableRefObject<any>} */
+  const filesChannelRef = useRef(null)
 
-  const activeFile = useMemo(() => {
-    return files.find((file) => file.id === activeFileId) || files[0] || null
-  }, [files, activeFileId])
+  const activeFile = useMemo(
+    () => files.find((file) => file.id === activeFileId) || files[0] || null,
+    [files, activeFileId]
+  )
 
-  const projectLink = project
-    ? `${window.location.origin}/editor/${project.slug}?share=${project.share_token}`
-    : ''
-
-  const saveFileDebounced = useMemo(
+  const saveContentDebounced = useMemo(
     () =>
-      debounce(async ({ fileId, content, userId, projectId }) => {
-        await updateProjectFile({
-          fileId,
-          content,
-          userId
-        })
-
-        await touchProject(projectId)
-      }, 350),
+      debounce(
+        /** @param {{fileId: string, content: string, userId: string, projectId: string}} params */
+        async ({ fileId, content, userId, projectId }) => {
+          await updateProjectFile({ fileId, content, userId })
+          await touchProject(projectId)
+        },
+        400
+      ),
     []
   )
 
   useEffect(() => {
     return () => {
-      saveFileDebounced.cancel()
+      saveContentDebounced.cancel()
     }
-  }, [saveFileDebounced])
+  }, [saveContentDebounced])
 
   useEffect(() => {
-    if (!user || !slug) {
-      setProjectLoading(false)
-      return
-    }
+    if (!slug || !user?.id) return
+
+    let cancelled = false
 
     async function loadProject() {
       try {
-        setProjectLoading(true)
-        setProjectError('')
+        setIsLoading(true)
 
         await ensureProfile(user)
 
+        if (!slug) throw new Error('No project slug provided')
         const foundProject = await getProjectBySlug(slug)
-        const shareToken = searchParams.get('share')
 
+        const shareToken = searchParams.get('share')
         if (foundProject.share_token && shareToken && shareToken !== foundProject.share_token) {
-          throw new Error('Link de share invalid.')
+          throw new Error('Invalid share link.')
         }
 
         await ensureProjectMembership(foundProject.id, user.id, 'editor')
 
         const [projectFiles, members] = await Promise.all([
           getProjectFiles(foundProject.id),
-          getProjectMembers(foundProject.id)
+          getProjectMembers(foundProject.id),
         ])
 
+        if (cancelled) return
+
         setProject(foundProject)
-        setFiles(projectFiles || [])
-        setActiveFileId(projectFiles?.[0]?.id ?? null)
-        setPreviewDoc(buildPreviewDocument(projectFiles || []))
+        setFiles(projectFiles)
+        setActiveFileId(projectFiles[0]?.id ?? null)
         setCollaborators(
-          (members || []).map((member) => ({
+          members.map((member) => ({
             userId: member.user_id,
-            username:
-              (Array.isArray(member.profiles)
-                ? member.profiles[0]?.username
-                : member.profiles?.username) || 'User',
-            color:
-              (Array.isArray(member.profiles)
-                ? member.profiles[0]?.cursor_color
-                : member.profiles?.cursor_color) || getUserCursorColor(member.user_id),
-            role: member.role || 'editor'
+            username: member.profiles?.username || 'User',
+            color: member.profiles?.cursor_color || getUserCursorColor(member.user_id),
+            role: member.role,
           }))
         )
       } catch (error) {
         console.error(error)
-        setProjectError(error?.message || 'Nu am putut încărca proiectul.')
-        setProject(null)
+        alert(((error instanceof Error ? error.message : String(error)) || 'Could not load project.'))
       } finally {
-        setProjectLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     loadProject()
-  }, [slug, user, searchParams])
+
+    return () => {
+      cancelled = true
+    }
+  }, [slug, searchParams, user])
 
   useEffect(() => {
-    setPreviewDoc(buildPreviewDocument(files))
+    setPreview(buildPreviewDocument(files))
   }, [files])
 
   useEffect(() => {
     if (!project?.id || !user?.id) return
 
-    let fileChannel
-    let presenceChannel
+    const filesChannel = supabase.channel(`project-files-${project.id}`)
+    filesChannelRef.current = filesChannel
 
-    async function setupRealtime() {
-      fileChannel = supabase.channel(`project-files-${project.id}`)
-      fileChannelRef.current = fileChannel
+    filesChannel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'project_files',
+          filter: `project_id=eq.${project.id}`,
+        },
+        (payload) => {
+          const inserted = payload.new
+          setFiles(
+          /** @param {any[]} prev */
+          (prev) => {
+            if (
+              prev.some(
+                /** @param {any} file */
+                (file) => file.id === inserted.id
+              )
+            ) return prev
+            return [...prev, inserted]
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'project_files',
+          filter: `project_id=eq.${project.id}`,
+        },
+        (payload) => {
+          const updated = payload.new
+          setFiles(
+            /** @param {any[]} prev */
+            (prev) =>
+              prev.map(
+                /** @param {any} file */
+                (file) => (file.id === updated.id ? updated : file)
+              )
+          )
+        }
+      )
+      .subscribe()
 
-      fileChannel
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'project_files',
-            filter: `project_id=eq.${project.id}`
-          },
-          (payload) => {
-            const inserted = payload.new
+    const presenceChannel = supabase.channel(`project-presence-${project.id}`, {
+      config: {
+        presence: { key: user.id },
+        broadcast: { self: false },
+      },
+    })
+    presenceChannelRef.current = presenceChannel
 
-            setFiles((prev) => {
-              if (prev.some((file) => file.id === inserted.id)) return prev
-              const next = [...prev, inserted]
-              return next
-            })
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState()
+        const onlineUsers = Object.values(state)
+          .flat()
+          .map((entry) => ({
+            userId: (entry?.user_id || entry?.['user_id']) ?? '',
+            username: (entry?.username || entry?.['username']) ?? 'User',
+            color: (entry?.color || entry?.['color']) ?? '#000000',
+          }))
 
-            setActiveFileId((prev) => prev || inserted.id)
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'project_files',
-            filter: `project_id=eq.${project.id}`
-          },
-          (payload) => {
-            const updated = payload.new
-
-            setFiles((prev) =>
-              prev.map((file) => (file.id === updated.id ? updated : file))
+        const uniqueUsers = Array.from(new Map(onlineUsers.map((u) => [u.userId, u])).values())
+        setCollaborators(
+          /** @param {any[]} prev */
+          (prev) => {
+            const roleMap = new Map(
+              prev.map(
+                /** @param {any} item */
+                (item) => [item.userId, item.role]
+              )
             )
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'project_files',
-            filter: `project_id=eq.${project.id}`
-          },
-          (payload) => {
-            const deletedId = payload.old.id
-
-            setFiles((prev) => {
-              const next = prev.filter((file) => file.id !== deletedId)
-              return next
-            })
-
-            setActiveFileId((prev) => {
-              if (prev !== deletedId) return prev
-              const remaining = files.filter((file) => file.id !== deletedId)
-              return remaining[0]?.id ?? null
-            })
-          }
-        )
-        .subscribe()
-
-      presenceChannel = supabase.channel(`project-presence-${project.id}`, {
-        config: {
-          presence: {
-            key: user.id
-          },
-          broadcast: {
-            self: false
-          }
+          return uniqueUsers.map((userItem) => ({
+            ...userItem,
+            role: roleMap.get(userItem.userId) || 'editor',
+          }))
+        })
+      })
+      .on('broadcast', { event: 'cursor-move' }, ({ payload }) => {
+        setRemoteCursors(
+          /** @param {any[]} prev */
+          (prev) => {
+            /** @type {any[]} */
+            const next = prev.filter(
+              /** @param {any} item */
+              (item) => item.userId !== payload.userId
+            )
+          return [...next, payload]
+        })
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: user.id,
+            username: user.user_metadata?.username || user.email?.split('@')[0] || 'User',
+            color: getUserCursorColor(user.id),
+          })
         }
       })
 
-      presenceChannelRef.current = presenceChannel
-
-      presenceChannel
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannel.presenceState()
-          const users = Object.values(state).flat()
-
-          const uniqueUsers = Array.from(
-            new Map(
-              users.map((entry) => [
-                entry.user_id,
-                {
-                  userId: entry.user_id,
-                  username: entry.username,
-                  color: entry.color,
-                  role: entry.role || 'editor'
-                }
-              ])
-            ).values()
-          )
-
-          setCollaborators(uniqueUsers)
-        })
-        .on('broadcast', { event: 'cursor-move' }, ({ payload }) => {
-          setRemoteCursors((prev) => {
-            const filtered = prev.filter((cursor) => cursor.userId !== payload.userId)
-            return [...filtered, payload]
-          })
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await presenceChannel.track({
-              user_id: user.id,
-              username:
-                user.user_metadata?.username ||
-                user.email?.split('@')[0] ||
-                'User',
-              color: getUserCursorColor(user.id),
-              role: 'editor'
-            })
-          }
-        })
-    }
-
-    setupRealtime().catch((error) => {
-      console.error('Realtime setup error:', error)
-    })
-
     return () => {
-      if (fileChannel) supabase.removeChannel(fileChannel)
-      if (presenceChannel) supabase.removeChannel(presenceChannel)
+      if (filesChannelRef.current) supabase.removeChannel(filesChannelRef.current)
+      if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current)
     }
-  }, [project?.id, user?.id])
+  }, [project?.id, user])
 
-  /** @param {string} nextContent */
-  function updateActiveFileContent(nextContent) {
-    if (!activeFile || !project?.id || !user?.id) return
-
-    setFiles((prev) =>
-      prev.map((file) =>
-        file.id === activeFile.id
-          ? { ...file, content: nextContent ?? '' }
-          : file
-      )
-    )
-
-    saveFileDebounced({
-      fileId: activeFile.id,
-      content: nextContent ?? '',
-      userId: user.id,
-      projectId: project.id
-    })
-  }
-
-  async function createNewFile() {
-    if (!project?.id || !user?.id) return
-
-    const trimmedName = newFileName.trim()
-    const finalName = trimmedName || `file-${files.length + 1}.${newFileType}`
-    const hasExtension = finalName.includes('.')
-    const safeName = hasExtension ? finalName : `${finalName}.${newFileType}`
-
-    const alreadyExists = files.some(
-      (file) => file.name.toLowerCase() === safeName.toLowerCase()
-    )
-
-    if (alreadyExists) {
-      alert('Există deja un fișier cu numele ăsta.')
+  async function handleCreateFile() {
+    if (!project?.id) return
+    if (!newFileName.trim()) {
+      alert('Scrie numele fișierului.')
       return
     }
 
     try {
-      const created = await createProjectFile({
-        projectId: project.id,
-        name: safeName,
-        language: newFileType,
-        content: makeStarterContent(newFileType, safeName),
-        updatedBy: user.id
-      })
+      setIsCreatingFile(true)
 
-      setFiles((prev) => [...prev, created])
-      setActiveFileId(created.id)
-      setNewFileName('')
-      setNewFileType('js')
-      await touchProject(project.id)
-    } catch (error) {
-      console.error(error)
-      alert(error?.message || 'Nu am putut crea fișierul.')
-    }
-  }
+      let normalizedName = newFileName.trim()
+      const extension = getExtension(normalizedName)
 
-  async function closeFile(fileId) {
-    if (files.length === 1) {
-      alert('Proiectul trebuie să aibă cel puțin un fișier.')
-      return
-    }
-
-    try {
-      await deleteProjectFile(fileId)
-
-      const nextFiles = files.filter((file) => file.id !== fileId)
-      setFiles(nextFiles)
-
-      if (activeFileId === fileId) {
-        setActiveFileId(nextFiles[0]?.id ?? null)
+      if (!extension) {
+        const map = {
+          javascript: 'js',
+          html: 'html',
+          css: 'css',
+          python: 'py',
+          json: 'json',
+        }
+        normalizedName = `${normalizedName}.${{ javascript: 'js', html: 'html', css: 'css', python: 'py', json: 'json' }[newFileLanguage] || 'js'}`
       }
 
+      const starterContentMap = {
+        html: '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>Document</title>\n</head>\n<body>\n  \n</body>\n</html>',
+        css: 'body {\n  margin: 0;\n  font-family: Arial, sans-serif;\n}\n',
+        javascript: 'console.log("Hello from iTECify!");\n',
+        python: 'print("Hello from iTECify!")\n',
+        json: '{\n  "hello": "world"\n}\n',
+      }
+
+      const created = await createProjectFile({
+        projectId: project.id,
+        name: normalizedName,
+        language: getLanguageFromFilename(normalizedName),
+        content: { html: '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>Document</title>\n</head>\n<body>\n  \n</body>\n</html>', css: 'body {\n  margin: 0;\n  font-family: Arial, sans-serif;\n}\n', javascript: 'console.log("Hello from iTECify!");\n', python: 'print("Hello from iTECify!")\n', json: '{\n  "hello": "world"\n}\n' }[newFileLanguage] || '',
+        updatedBy: user.id,
+      })
+
+      setFiles(
+        /** @param {any[]} prev */
+        (prev) => [...prev, created]
+      )
+      setActiveFileId(created.id)
+      setNewFileName('')
       await touchProject(project.id)
     } catch (error) {
       console.error(error)
-      alert(error?.message || 'Nu am putut șterge fișierul.')
+      const message = error instanceof Error ? error.message : 'Nu s-a putut crea fișierul.'
+      alert(message)
+    } finally {
+      setIsCreatingFile(false)
     }
   }
 
-  function runCode() {
-    setPreviewDoc(buildPreviewDocument(files))
+  function handleFileContentChange(
+    /** @param {any} nextValue */
+    nextValue
+  ) {
+    if (!activeFile || !user?.id || !project?.id) return
+
+    setFiles(
+      /** @param {any[]} prev */
+      (prev) =>
+        prev.map(
+          /** @param {any} file */
+          (file) =>
+            file.id === activeFile.id
+              ? { ...file, content: nextValue }
+              : file
+        )
+    )
+
+    saveContentDebounced({
+      fileId: activeFile.id,
+      content: nextValue,
+      userId: user.id,
+      projectId: project.id,
+    })
   }
 
-  async function copyProjectLink() {
-    if (!projectLink) return
+  async function handleSaveNow() {
+    if (!activeFile || !user?.id || !project?.id) return
 
     try {
-      await navigator.clipboard.writeText(projectLink)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      setIsSaving(true)
+      saveContentDebounced.cancel()
+
+      await updateProjectFile({
+        fileId: activeFile.id,
+        content: activeFile.content,
+        userId: user.id,
+      })
+
+      await touchProject(project.id)
+      alert('Project saved.')
     } catch (error) {
       console.error(error)
-      alert('Nu am putut copia linkul.')
+      alert(error.message || 'Nu s-a putut salva proiectul.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  async function handleCursorChange(position) {
+  async function handleCopyShareLink() {
+    if (!project) return
+
+    try {
+      const url = `${window.location.origin}/editor/${project.slug}?share=${project.share_token}`
+      await navigator.clipboard.writeText(url)
+      alert('Project link copied.')
+    } catch (error) {
+      console.error(error)
+      alert('Nu s-a putut copia linkul.')
+    }
+  }
+
+  async function handleCursorChange(
+    /** @param {any} position */
+    position
+  ) {
     if (!presenceChannelRef.current || !activeFile || !user?.id) return
 
     try {
@@ -530,321 +482,233 @@ export default function Editor() {
         event: 'cursor-move',
         payload: {
           userId: user.id,
-          username:
-            user.user_metadata?.username ||
-            user.email?.split('@')[0] ||
-            'User',
+          username: user.user_metadata?.username || user.email?.split('@')[0] || 'User',
           color: getUserCursorColor(user.id),
           fileId: activeFile.id,
           lineNumber: position.lineNumber,
-          column: position.column
-        }
+          column: position.column,
+        },
       })
     } catch (error) {
-      console.error('Cursor broadcast error:', error)
+      console.error(error)
     }
   }
 
-  async function askAI() {
-  if (!activeFile) {
-    alert('Nu există fișier activ.')
-    return
-  }
-
-  if (!aiPrompt.trim()) {
-    alert('Scrie un prompt mai întâi.')
-    return
-  }
-
-  try {
-    setIsLoadingAI(true)
-
-    const res = await fetch('/api/ai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: aiPrompt.trim(),
-        code: activeFile.content ?? '',
-        filename: activeFile.name,
-        projectId: project?.id,
-      }),
-    })
-
-    const contentType = res.headers.get('content-type') || ''
-    let data
-
-    if (contentType.includes('application/json')) {
-      data = await res.json()
-    } else {
-      const text = await res.text()
-      throw new Error(text || 'Răspuns invalid de la server.')
+  function handleGenerateAiEdit() {
+    if (!aiPrompt.trim()) {
+      alert('Scrie ce vrei să modifice AI-ul.')
+      return
     }
 
-    if (!res.ok) {
-      throw new Error(data?.error || 'AI request failed')
-    }
-
-    if (!data || typeof data.code !== 'string') {
-      throw new Error('Serverul nu a returnat cod valid.')
-    }
-
-    const newCode = data.code
-
-    setFiles((prev) =>
-      prev.map((file) =>
-        file.id === activeFile.id
-          ? { ...file, content: newCode }
-          : file
-      )
-    )
-
-    await updateProjectFile({
-      fileId: activeFile.id,
-      content: newCode,
-      userId: user.id,
-    })
-
-    await touchProject(project.id)
-    setAiPrompt('')
-  } catch (error) {
-    console.error('AI error:', error)
-    alert(error?.message || 'A apărut o eroare la AI.')
-  } finally {
-    setIsLoadingAI(false)
+    alert('Butonul AI este doar UI momentan. Dacă vrei, îți scriu și integrarea reală.')
   }
-}
 
   const visibleRemoteCursors = remoteCursors.filter(
     (cursor) => cursor.userId !== user?.id && cursor.fileId === activeFile?.id
   )
 
-  if (projectLoading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-[radial-gradient(circle_at_top,#13233d_0%,#08111e_45%,#050b14_100%)] text-white">
-        Se încarcă proiectul...
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-[radial-gradient(circle_at_top,#13233d_0%,#08111e_45%,#050b14_100%)] text-white">
-        Trebuie să fii logat ca să intri în proiect.
-      </div>
-    )
-  }
-
-  if (!project) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-[radial-gradient(circle_at_top,#13233d_0%,#08111e_45%,#050b14_100%)] text-white">
-        {projectError || 'Proiectul nu există.'}
+      <div className="min-h-screen bg-[#050b14] text-white flex items-center justify-center">
+        Loading project...
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#13233d_0%,#08111e_45%,#050b14_100%)] text-white">
-      <div className="border-b border-white/10 bg-white/5 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-xl font-semibold">{project.name}</h1>
-            <p className="text-sm text-slate-400">
-              Editor colaborativ + cursoare live + project chat
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#050b14] text-white">
+      <div className="mx-auto max-w-[1700px] p-4">
+        <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0f172a,#172554,#0b1020)] p-6 mb-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3 mb-3">
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Dashboard
+                </button>
 
-          <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveNow}
+                  disabled={isSaving || !activeFile}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+
+              <h1 className="text-3xl font-bold break-words">{project?.name || 'Untitled project'}</h1>
+              <p className="mt-1 text-slate-300">
+                Editor colaborativ + cursoare live + project chat
+              </p>
+
+              <p className="mt-4 text-sm text-slate-400 break-all">
+                {window.location.origin}/editor/{project?.slug}
+                {project?.share_token ? `?share=${project.share_token}` : ''}
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
+                  <Users className="h-4 w-4" />
+                  {collaborators.length} online
+                </div>
+
+                {collaborators.map((member) => (
+                  <div
+                    key={member.userId}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: member.color }}
+                    />
+                    {member.username}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <button
-              type="button"
-              onClick={copyProjectLink}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+              onClick={handleCopyShareLink}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
             >
               <Copy className="h-4 w-4" />
-              {copied ? 'Copied' : 'Copy project link'}
+              Copy project link
             </button>
           </div>
         </div>
 
-        <div className="mx-auto max-w-[1700px] px-4 pb-4">
-          <p className="mb-3 truncate text-xs text-slate-400">{projectLink}</p>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr_0.65fr]">
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0b1220,#1a2640)] p-4">
+              <div className="mb-4 flex items-center gap-2 text-2xl font-semibold">
+                <Plus className="h-5 w-5" />
+                Create new file
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-              <Users className="h-4 w-4" />
-              <span>{collaborators.length} online</span>
-            </div>
-
-            {collaborators.map((member) => (
-              <div
-                key={member.userId}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-              >
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: member.color }}
+              <div className="flex flex-col gap-3 md:flex-row">
+                <input
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  placeholder="Ex: about, app, index, styles"
+                  className="flex-1 rounded-2xl border border-white/10 bg-[#020817] px-4 py-3 text-white outline-none placeholder:text-slate-500"
                 />
-                <span className="text-white">{member.username}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="mx-auto grid max-w-[1700px] gap-4 p-4 xl:grid-cols-[1fr_360px]">
-        <div className="min-w-0">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="min-w-0">
-              <div className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-3 flex items-center gap-3">
-                  <Plus className="h-4 w-4" />
-                  <p className="text-sm font-medium">Create new file</p>
-                </div>
-
-                <div className="flex flex-col gap-3 md:flex-row">
-                  <input
-                    value={newFileName}
-                    onChange={(e) => setNewFileName(e.target.value)}
-                    placeholder="Ex: about, app, index, styles"
-                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none"
-                  />
-
-                  <select
-                    value={newFileType}
-                    onChange={(e) => setNewFileType(e.target.value)}
-                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none"
-                  >
-                    <option value="html">HTML</option>
-                    <option value="css">CSS</option>
-                    <option value="js">JavaScript</option>
-                    <option value="json">JSON</option>
-                    <option value="md">Markdown</option>
-                    <option value="py">Python</option>
-                    <option value="cpp">C++</option>
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={createNewFile}
-                    className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/15"
-                  >
-                    Create
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-4 flex flex-wrap gap-2">
-                {files.map((file) => {
-                  const isActive = file.id === activeFileId
-
-                  return (
-                    <div
-                      key={file.id}
-                      className={`flex items-center gap-2 rounded-2xl border px-3 py-2 transition ${
-                        isActive
-                          ? 'border-fuchsia-400/50 bg-fuchsia-500/15 text-white'
-                          : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setActiveFileId(file.id)}
-                        className="text-sm"
-                      >
-                        {file.name}
-                      </button>
-
-                      {files.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => closeFile(file.id)}
-                          className="rounded-md p-0.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-                  <Wand2 className="h-4 w-4" />
-                  AI edit current file
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <textarea
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="Ex: schimbă fișierul într-un HTML valid, adaugă head și body..."
-                    className="min-h-[110px] rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-sm text-white outline-none"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={askAI}
-                    disabled={isLoadingAI}
-                    className="w-fit rounded-2xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
-                  >
-                    {isLoadingAI ? 'Generating...' : 'Generate with AI'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm text-slate-300">
-                  Fișier activ: <span className="font-semibold text-white">{activeFile?.name}</span>
-                </p>
+                <select
+                  value={newFileLanguage}
+                  onChange={(e) => setNewFileLanguage(e.target.value)}
+                  className="rounded-2xl border border-white/10 bg-[#020817] px-4 py-3 text-white outline-none"
+                >
+                  <option value="javascript">JavaScript</option>
+                  <option value="html">HTML</option>
+                  <option value="css">CSS</option>
+                  <option value="python">Python</option>
+                  <option value="json">JSON</option>
+                </select>
 
                 <button
-                  type="button"
-                  onClick={runCode}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                  onClick={handleCreateFile}
+                  disabled={isCreatingFile}
+                  className="rounded-2xl bg-slate-600 px-6 py-3 font-semibold text-white transition hover:bg-slate-500 disabled:opacity-60"
+                >
+                  {isCreatingFile ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {files.map((file) => (
+                <button
+                  key={file.id}
+                  onClick={() => setActiveFileId(file.id)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    activeFileId === file.id
+                      ? 'bg-fuchsia-900/70 text-white border border-fuchsia-400/40'
+                      : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {file.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0b1220,#1a2640)] p-4">
+              <div className="mb-4 flex items-center gap-2 text-2xl font-semibold">
+                <Wand2 className="h-5 w-5" />
+                AI edit current file
+              </div>
+
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Ex: schimbă fișierul într-un HTML valid, adaugă head și body..."
+                className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-[#020817] px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              />
+
+              <button
+                onClick={handleGenerateAiEdit}
+                className="mt-4 rounded-2xl bg-violet-600 px-5 py-3 font-semibold text-white transition hover:bg-violet-500"
+              >
+                Generate with AI
+              </button>
+            </div>
+
+            <div>
+              <div className="mb-3 text-2xl font-semibold">
+                Fișier activ: <span className="font-bold">{activeFile?.name || 'niciun fișier'}</span>
+              </div>
+
+              <div className="mb-3 flex justify-end">
+                <button
+                  onClick={() => setPreview(buildPreviewDocument(files))}
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-6 py-3 font-semibold text-white transition hover:bg-emerald-400"
                 >
                   <Play className="h-4 w-4" />
                   Run Preview
                 </button>
               </div>
 
-              <div className="h-[72vh]">
-                <MonacoCodeEditor
-                  filename={activeFile?.name || 'main.js'}
-                  value={activeFile?.content || ''}
-                  onChange={updateActiveFileContent}
-                  height="100%"
-                  onRun={runCode}
-                  onCursorChange={handleCursorChange}
-                  remoteCursors={visibleRemoteCursors}
-                />
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <div className="h-[72vh] overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
-                <div className="border-b border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-sm font-semibold text-white">Live Preview</p>
-                  <p className="text-xs text-slate-400">
-                    Preview-ul folosește primul fișier HTML și injectează toate fișierele CSS și JS.
-                  </p>
-                </div>
-
-                <iframe
-                  title="preview"
-                  srcDoc={previewDoc}
-                  sandbox="allow-scripts"
-                  className="h-[calc(100%-57px)] w-full bg-white"
-                />
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#081121]">
+                {activeFile ? (
+                  <MonacoCodeEditor
+                    filename={activeFile.name}
+                    language={getLanguageFromFilename(activeFile.name)}
+                    value={activeFile.content || ''}
+                    onChange={handleFileContentChange}
+                    onCursorChange={handleCursorChange}
+                    remoteCursors={visibleRemoteCursors ?? []}
+                    height="420px"
+                  />
+                ) : (
+                  <div className="flex h-[420px] items-center justify-center text-slate-400">
+                    Selectează sau creează un fișier.
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="min-w-0">
-          <div className="h-[85vh] overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
-            <ProjectChat projectId={project.id} user={user} />
+          <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#081121]">
+            <div className="border-b border-white/10 p-4">
+              <h2 className="text-2xl font-semibold">Live Preview</h2>
+              <p className="text-sm text-slate-400">
+                Preview-ul folosește primul fișier HTML și injectează toate fișierele CSS și JS.
+              </p>
+            </div>
+
+            <iframe
+              title="preview"
+              srcDoc={preview}
+              className="h-[760px] w-full bg-white"
+              sandbox="allow-scripts"
+            />
+          </div>
+
+          <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#081121]">
+            {project?.id ? <ProjectChat projectId={project.id} user={user} /> : null}
           </div>
         </div>
       </div>

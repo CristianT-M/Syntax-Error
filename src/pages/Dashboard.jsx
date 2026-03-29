@@ -1,22 +1,10 @@
 // @ts-nocheck
 
 import React, { useMemo, useState } from 'react'
+import { Save, ArrowLeft } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import {
-  Plus,
-  Code2,
-  Search,
-  Play,
-  MoreHorizontal,
-  Trash2,
-  FolderOpen,
-  ArrowLeft,
-  GitBranch,
-  Activity,
-  Copy,
-  Users
-} from 'lucide-react'
+import { Plus, Code2, Search, Play, MoreHorizontal, Trash2, FolderOpen, GitBranch, Activity, Copy, Users } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -117,6 +105,43 @@ int main() {
   },
 }
 
+/**
+ * @param {any} project
+ */
+async function handleSaveProject(project) {
+  try {
+    const files = Array.isArray(project?.project_files) ? project.project_files : []
+
+    const data = {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        language: project.language,
+        slug: project.slug,
+        saved_at: new Date().toISOString()
+      },
+      files
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json'
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${project.name || 'project'}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error(error)
+    alert('Nu s-a putut salva proiectul.')
+  }
+}
+
 export default function Dashboard() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -137,13 +162,10 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-        .select(`
-          *,
-          project_members (
-            user_id,
-            role
-          )
-        `)
+.select(`
+  *,
+  project_files (*)
+`)
         .or(`owner_id.eq.${user.id},id.in.(select project_id from project_members where user_id = '${user.id}')`)
         .order('created_at', { ascending: false })
 
@@ -475,6 +497,14 @@ export default function Dashboard() {
                             Deschide în Editor
                           </Button>
                         </Link>
+
+                        <button
+                          onClick={() => handleSaveProject(project)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                        >
+                          <Save className="h-4 w-4" />
+                          Salvează proiectul
+                        </button>
 
                         <p className="truncate text-[10px] text-muted-foreground">
                           {window.location.origin}/editor/{project.slug}?share={project.share_token}
