@@ -1,118 +1,58 @@
-import { supabase } from './supabase'
-
-export function generateSlug(length = 8) {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return result
-}
-
-/**
- * @param {Object} params
- * @param {string} params.name
- * @param {string} params.ownerId
- */
-export async function createProject({ name, ownerId }) {
-  const slug = generateSlug()
-
-  const { data: project, error } = await supabase
-    .from('projects')
-    .insert({
-      name,
-      slug,
-      owner_id: ownerId,
-      is_public: true
-    })
-    .select()
-    .single()
+import { supabase } from '@/lib/supabase'
 
   if (error) throw error
-
-  const { error: memberError } = await supabase
-    .from('project_members')
-    .insert({
-      project_id: project.id,
-      user_id: ownerId
-    })
-
-  if (memberError) throw memberError
-
-  return project
+  return data || []
 }
 
-/**
- * @param {string} slug
- */
-export async function getProjectBySlug(slug) {
+export async function createProjectFile({
+  projectId,
+  name,
+  language,
+  content = '',
+  isEntry = false,
+  updatedBy = null,
+}) {
   const { data, error } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('slug', slug)
+    .from('project_files')
+    .insert({
+      project_id: projectId,
+      name,
+      language,
+      content,
+      is_entry: isEntry,
+      updated_by: updatedBy,
+    })
+    .select()
     .single()
 
   if (error) throw error
   return data
 }
 
-/**
- * @param {string} projectId
- * @param {string} userId
- */
-export async function ensureProjectMembership(projectId, userId) {
-  const { error } = await supabase
-    .from('project_members')
-    .upsert(
-      {
-        project_id: projectId,
-        user_id: userId
-      },
-      {
-        onConflict: 'project_id,user_id'
-      }
-    )
-
-  if (error) throw error
-}
-
-/**
- * @param {string} projectId
- */
-export async function getProjectMessages(projectId) {
+export async function updateProjectFile({ fileId, content, userId }) {
   const { data, error } = await supabase
-    .from('chat_messages')
-    .select(`
-      id,
-      project_id,
-      user_id,
+    .from('project_files')
+    .update({
       content,
-      created_at,
-      profiles:user_id (
-        username
-      )
-    `)
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: true })
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', fileId)
+    .select()
+    .single()
 
   if (error) throw error
-  return data || []
+  return data
 }
 
-/**
- * @param {Object} params
- * @param {string} params.projectId
- * @param {string} params.userId
- * @param {string} params.content
- */
-export async function sendProjectMessage({ projectId, userId, content }) {
+export async function touchProject(projectId) {
   const { error } = await supabase
-    .from('chat_messages')
-    .insert({
-      project_id: projectId,
-      user_id: userId,
-      content
+    .from('projects')
+    .update({
+      last_activity_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
+    .eq('id', projectId)
 
   if (error) throw error
 }

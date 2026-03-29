@@ -1,65 +1,30 @@
-import { useEffect } from 'react'
-import { Toaster } from "@/components/ui/toaster"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom'
-import PageNotFound from './lib/PageNotFound'
-import { AuthProvider, useAuth } from './lib/AuthContext'
-import Landing from './pages/Landing'
-import Editor from './pages/Editor'
-import Dashboard from './pages/Dashboard'
-import Auth from './pages/Auth'
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
 
-const ProtectedRoute = ({ children }) => {
-  const { user } = useAuth()
-  return user ? children : <Navigate to="/auth" replace />
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background text-foreground">
+        <div className="rounded-2xl border border-border bg-card px-6 py-4 text-sm text-muted-foreground">
+          Loading...
+        </div>
+      </div>
+    )
+  }
+
+  return user ? <Navigate to="/dashboard" replace /> : children
 }
 
-function ThemeBoot() {
-  useEffect(() => {
-    const saved = localStorage.getItem('itecify-theme')
-
-    if (saved === 'light') {
-      document.documentElement.classList.remove('dark')
-      return
-    }
-
-    if (saved === 'dark') {
-      document.documentElement.classList.add('dark')
-      return
-    }
-
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    document.documentElement.classList.toggle('dark', prefersDark)
-  }, [])
-
-  return null
-}
-
-const AppRoutes = () => {
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/auth" element={<Auth />} />
-
       <Route
-        path="/editor"
+        path="/auth"
         element={
-          <ProtectedRoute>
-            <Editor />
-          </ProtectedRoute>
+          <GuestRoute>
+            <Auth />
+          </GuestRoute>
         }
       />
-
-      <Route
-        path="/editor/:projectId"
-        element={
-          <ProtectedRoute>
-            <Editor />
-          </ProtectedRoute>
-        }
-      />
-
       <Route
         path="/dashboard"
         element={
@@ -68,24 +33,38 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
+      <Route
+        path="/quick-create"
+        element={
+          <ProtectedRoute>
+            <QuickCreateEditor />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/editor/:slug"
+        element={
+          <ProtectedRoute>
+            <Editor />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   )
 }
 
-function App() {
+export default function App() {
   return (
-    <AuthProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <QueryClientProvider client={queryClientInstance}>
-        <ThemeBoot />
-        <Router>
-          <AppRoutes />
-        </Router>
-        <Toaster />
+        <AuthProvider>
+          <Router>
+            <AppRoutes />
+            <Toaster richColors position="top-right" />
+          </Router>
+        </AuthProvider>
       </QueryClientProvider>
-    </AuthProvider>
+    </ThemeProvider>
   )
 }
-
-export default App
