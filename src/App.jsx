@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
+
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom'
 import PageNotFound from './lib/PageNotFound'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Landing from './pages/Landing'
@@ -9,13 +10,12 @@ import Editor from './pages/Editor'
 import Dashboard from './pages/Dashboard'
 import Auth from './pages/Auth'
 
-const ProtectedRoute = ({ children }) => {
+function ProtectedRoute({ children }) {
   const { user } = useAuth()
-
   return user ? children : <Navigate to="/auth" replace />
 }
 
-const AppRoutes = () => {
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
@@ -25,12 +25,19 @@ const AppRoutes = () => {
         path="/editor"
         element={
           <ProtectedRoute>
-            <Editor />
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />
 
-<Route path="/editor/:slug" element={<Editor />} />
+      <Route
+        path="/editor/:slug"
+        element={
+          <ProtectedRoute>
+            <Editor />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/dashboard"
@@ -46,7 +53,7 @@ const AppRoutes = () => {
   )
 }
 
-function App() {
+export default function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
@@ -58,5 +65,3 @@ function App() {
     </AuthProvider>
   )
 }
-
-export default App
