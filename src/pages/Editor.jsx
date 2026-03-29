@@ -302,11 +302,15 @@ export default function Editor() {
         const state = presenceChannel.presenceState()
         const onlineUsers = Object.values(state)
           .flat()
-          .map((entry) => ({
-            userId: (entry?.user_id || entry?.['user_id']) ?? '',
-            username: (entry?.username || entry?.['username']) ?? 'User',
-            color: (entry?.color || entry?.['color']) ?? '#000000',
-          }))
+          .map((entry) => {
+            /** @type {any} */
+            const entryData = entry
+            return {
+              userId: (entryData?.user_id || entryData?.['user_id']) ?? '',
+              username: (entryData?.username || entryData?.['username']) ?? 'User',
+              color: (entryData?.color || entryData?.['color']) ?? '#000000',
+            }
+          })
 
         const uniqueUsers = Array.from(new Map(onlineUsers.map((u) => [u.userId, u])).values())
         setCollaborators(
@@ -366,7 +370,7 @@ export default function Editor() {
       const extension = getExtension(normalizedName)
 
       if (!extension) {
-        const map = {
+        const _map = {
           javascript: 'js',
           html: 'html',
           css: 'css',
@@ -376,7 +380,7 @@ export default function Editor() {
         normalizedName = `${normalizedName}.${{ javascript: 'js', html: 'html', css: 'css', python: 'py', json: 'json' }[newFileLanguage] || 'js'}`
       }
 
-      const starterContentMap = {
+      const _starterContentMap = {
         html: '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>Document</title>\n</head>\n<body>\n  \n</body>\n</html>',
         css: 'body {\n  margin: 0;\n  font-family: Arial, sans-serif;\n}\n',
         javascript: 'console.log("Hello from iTECify!");\n',
@@ -408,10 +412,10 @@ export default function Editor() {
     }
   }
 
-  function handleFileContentChange(
-    /** @param {any} nextValue */
-    nextValue
-  ) {
+  /**
+   * @param {any} nextValue
+   */
+  function handleFileContentChange(nextValue) {
     if (!activeFile || !user?.id || !project?.id) return
 
     setFiles(
@@ -451,7 +455,8 @@ export default function Editor() {
       alert('Project saved.')
     } catch (error) {
       console.error(error)
-      alert(error.message || 'Nu s-a putut salva proiectul.')
+      const message = error instanceof Error ? error.message : String(error) || 'Nu s-a putut salva proiectul.'
+      alert(message)
     } finally {
       setIsSaving(false)
     }
@@ -470,10 +475,10 @@ export default function Editor() {
     }
   }
 
-  async function handleCursorChange(
-    /** @param {any} position */
-    position
-  ) {
+  /**
+   * @param {any} position
+   */
+  async function handleCursorChange(position) {
     if (!presenceChannelRef.current || !activeFile || !user?.id) return
 
     try {
@@ -675,12 +680,10 @@ export default function Editor() {
                 {activeFile ? (
                   <MonacoCodeEditor
                     filename={activeFile.name}
-                    language={getLanguageFromFilename(activeFile.name)}
                     value={activeFile.content || ''}
                     onChange={handleFileContentChange}
                     onCursorChange={handleCursorChange}
                     remoteCursors={visibleRemoteCursors ?? []}
-                    height="420px"
                   />
                 ) : (
                   <div className="flex h-[420px] items-center justify-center text-slate-400">

@@ -55,6 +55,16 @@ function getLanguageFromFileName(fileName = '') {
   }
 }
 
+/**
+ * @param {{
+ *   value: string;
+ *   onChange: Function;
+ *   filename?: string;
+ *   onRun?: Function;
+ *   onCursorChange?: Function;
+ *   remoteCursors?: any[];
+ * }} props
+ */
 export default function MonacoCodeEditor({
   value,
   onChange,
