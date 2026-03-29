@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import debounce from 'lodash.debounce'
+import debounce from 'lodash/debounce'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Copy, Plus, Play, Save, Users, Wand2 } from 'lucide-react'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor'
