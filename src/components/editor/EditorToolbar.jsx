@@ -6,14 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import PresenceBar from './PresenceBar';
 import SandboxControls from './SandboxControls';
-import AuthButtons from '../AuthButtons'; // 🔥 ADAUGAT
 
 export default function EditorToolbar({ onToggleTimeTravel, timeTravelVisible, roomName = 'iTEC 2026 Project' }) {
   return (
     <TooltipProvider>
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/50 backdrop-blur-sm">
-        
-        {/* LEFT */}
+        {/* Left: Room info + Sandbox controls */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -23,17 +21,17 @@ export default function EditorToolbar({ onToggleTimeTravel, timeTravelVisible, r
               main
             </Badge>
           </div>
-
+          
           <div className="h-4 w-px bg-border" />
           <SandboxControls />
         </div>
 
-        {/* RIGHT */}
+        {/* Right: Presence + Tools */}
         <div className="flex items-center gap-3">
           <PresenceBar />
-
+          
           <div className="h-4 w-px bg-border" />
-
+          
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -47,7 +45,7 @@ export default function EditorToolbar({ onToggleTimeTravel, timeTravelVisible, r
             </TooltipTrigger>
             <TooltipContent>Time-Travel Debugger</TooltipContent>
           </Tooltip>
-
+          
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -65,10 +63,6 @@ export default function EditorToolbar({ onToggleTimeTravel, timeTravelVisible, r
             </TooltipTrigger>
             <TooltipContent>Share Room</TooltipContent>
           </Tooltip>
-
-          {/* 🔥 AICI APAR LOGIN / LOGOUT */}
-          <div className="h-4 w-px bg-border" />
-          <AuthButtons />
         </div>
       </div>
     </TooltipProvider>

@@ -1,67 +1,61 @@
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
+import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { AuthProvider, useAuth } from '@/lib/AuthContext'
-import { Toaster } from '@/components/ui/toaster'
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import PageNotFound from './lib/PageNotFound';
+import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import Landing from './pages/Landing';
+import Editor from './pages/Editor';
+import Dashboard from './pages/Dashboard';
 
-import Landing from '@/pages/Landing'
-import Editor from '@/pages/Editor'
-import Dashboard from '@/pages/Dashboard'
-import Auth from '@/pages/Auth'
-import PageNotFound from '@/lib/PageNotFound'
+const AuthenticatedApp = () => {
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
-function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return <div className="p-6">Loading...</div>
+  // Show loading spinner while checking app public settings or auth
+  if (isLoadingPublicSettings || isLoadingAuth) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
-  return user ? children : <Navigate to="/auth" replace />
-}
-<Route
-  path="/editor/:slug"
-  element={
-    <ProtectedRoute>
-      <Editor />
-    </ProtectedRoute>
+  // Handle authentication errors
+  if (authError) {
+    if (authError.type === 'user_not_registered') {
+      return <UserNotRegisteredError />;
+    } else if (authError.type === 'auth_required') {
+      // Redirect to login automatically
+      navigateToLogin();
+      return null;
+    }
   }
-/>
-function AppRoutes() {
+
+  // Render the main app
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/auth" element={<Auth />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/editor/:slug"
-        element={
-          <ProtectedRoute>
-            <Editor />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/editor" element={<Editor />} />
+      <Route path="/dashboard" element={<Dashboard />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+  );
+};
+
+
+function App() {
+
+  return (
+    <AuthProvider>
+      <QueryClientProvider client={queryClientInstance}>
+        <Router>
+          <AuthenticatedApp />
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
+    </AuthProvider>
   )
 }
 
-export default function App() {
-  return (
-    <QueryClientProvider client={queryClientInstance}>
-      <AuthProvider>
-        <Router>
-          <AppRoutes />
-          <Toaster />
-        </Router>
-      </AuthProvider>
-    </QueryClientProvider>
-  )
-}
+export default App

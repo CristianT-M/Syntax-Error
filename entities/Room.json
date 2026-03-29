@@ -2,14 +2,6 @@
   "name": "Room",
   "type": "object",
   "properties": {
-    "id": {
-      "type": "string",
-      "description": "Unique room/project id"
-    },
-    "owner_id": {
-      "type": "string",
-      "description": "User id of the owner"
-    },
     "name": {
       "type": "string",
       "description": "Room/project name"
@@ -34,15 +26,67 @@
     "status": {
       "type": "string",
       "enum": [
-        "idle",
-        "running",
-        "archived"
+        "active",
+        "archived",
+        "running"
       ],
-      "default": "idle"
+      "default": "active"
     },
-    "created_at": {
-      "type": "string",
-      "description": "Creation timestamp"
+    "collaborators": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of collaborator emails"
+    },
+    "files": {
+      "type": "array",
+      "description": "Project files",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "description": "Code change history for time-travel",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "author_type": {
+            "type": "string",
+            "enum": [
+              "human",
+              "ai"
+            ]
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [
