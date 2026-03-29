@@ -200,6 +200,7 @@ export default function Editor() {
   const [newFileLanguage, setNewFileLanguage] = useState('javascript')
 
   const [aiPrompt, setAiPrompt] = useState('')
+  /** @type {[any, Function]} */
   const [aiSuggestion, setAiSuggestion] = useState(null)
   const [isAiLoading, setIsAiLoading] = useState(false)
 
@@ -264,7 +265,8 @@ export default function Editor() {
 
         await ensureProfile(user)
 
-        const foundProject = await getProjectBySlug(slug)
+    if (!slug) throw new Error('No project slug provided')
+    const foundProject = await getProjectBySlug(slug)
         if (!foundProject) throw new Error('Project not found.')
 
         if (
@@ -393,18 +395,34 @@ export default function Editor() {
         const state = presenceChannel.presenceState()
         const onlineUsers = Object.values(state)
           .flat()
-          .map((entry) => ({
-            userId: entry?.user_id ?? '',
-            username: entry?.username ?? 'User',
-            color: entry?.color ?? '#6366f1',
-          }))
+          .map(
+            /**
+             * @param {any} entry
+             */
+            (entry) => ({
+              userId: entry?.user_id ?? '',
+              username: entry?.username ?? 'User',
+              color: entry?.color ?? '#6366f1',
+            })
+          )
 
         const uniqueUsers = Array.from(
           new Map(onlineUsers.map((item) => [item.userId, item])).values()
         )
 
-        setCollaborators((prev) => {
-          const roleMap = new Map(prev.map((item) => [item.userId, item.role]))
+        setCollaborators(
+          /**
+           * @param {any} prev
+           */
+          (prev) => {
+            const roleMap = new Map(
+              prev.map(
+                /**
+                 * @param {any} item
+                 */
+                (item) => [item.userId, item.role]
+              )
+            )
           return uniqueUsers.map((item) => ({
             ...item,
             role: roleMap.get(item.userId) || 'editor',
@@ -474,7 +492,12 @@ export default function Editor() {
         updatedBy: user.id,
       })
 
-      setFiles((prev) => [...prev, created])
+      setFiles(
+        /**
+         * @param {any} prev
+         */
+        (prev) => [...prev, created]
+      )
       setActiveFileId(created.id)
       setNewFileName('')
 
@@ -499,10 +522,18 @@ export default function Editor() {
   function handleFileContentChange(nextValue) {
     if (!activeFile || !user?.id || !project?.id) return
 
-    setFiles((prev) =>
-      prev.map((file) =>
-        file.id === activeFile.id ? { ...file, content: nextValue } : file
-      )
+    setFiles(
+      /**
+       * @param {any} prev
+       */
+      (prev) =>
+        prev.map(
+          /**
+           * @param {any} file
+           */
+          (file) =>
+            file.id === activeFile.id ? { ...file, content: nextValue } : file
+        )
     )
 
     saveContentDebounced({
@@ -558,6 +589,9 @@ export default function Editor() {
     }
   }
 
+  /**
+   * @param {any} position
+   */
   /**
    * @param {any} position
    */
@@ -664,6 +698,9 @@ export default function Editor() {
     setAiSuggestion(null)
   }
 
+  /**
+   * @param {any} item
+   */
   function restoreTimelineEntry(item) {
     if (!activeFile || !item?.snapshot) return
 
