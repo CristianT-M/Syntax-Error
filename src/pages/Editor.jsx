@@ -179,6 +179,8 @@ export default function Editor() {
     }
   }, [saveContentDebounced])
 
+  const shareToken = searchParams.get('share')
+
   useEffect(() => {
     if (!slug || !user?.id) return
 
@@ -193,7 +195,6 @@ export default function Editor() {
         if (!slug) throw new Error('No project slug provided')
         const foundProject = await getProjectBySlug(slug)
 
-        const shareToken = searchParams.get('share')
         if (foundProject.share_token && shareToken && shareToken !== foundProject.share_token) {
           throw new Error('Invalid share link.')
         }
@@ -231,7 +232,7 @@ export default function Editor() {
     return () => {
       cancelled = true
     }
-  }, [slug, searchParams, user])
+  }, [slug, shareToken, user])
 
   useEffect(() => {
     setPreview(buildPreviewDocument(files))

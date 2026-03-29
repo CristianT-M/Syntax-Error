@@ -30,14 +30,7 @@ const AppRoutes = () => {
         }
       />
 
-<Route
-  path="/editor/:slug"
-  element={
-    <ProtectedRoute>
-      <Editor />
-    </ProtectedRoute>
-  }
-/>
+<Route path="/editor/:slug" element={<Editor />} />
 
       <Route
         path="/dashboard"
