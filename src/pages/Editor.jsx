@@ -204,6 +204,7 @@ export default function Editor() {
   const [aiSuggestion, setAiSuggestion] = useState(null)
   const [isAiLoading, setIsAiLoading] = useState(false)
 
+  /** @type {[any[], Function]} */
   const [timeline, setTimeline] = useState([])
   const [isSaving, setIsSaving] = useState(false)
   const [isCreatingFile, setIsCreatingFile] = useState(false)
@@ -238,7 +239,11 @@ export default function Editor() {
    * @param {any} entry
    */
   function pushTimelineEntry(entry) {
-    setTimeline((prev) => [
+    setTimeline(
+      /**
+       * @param {any} prev
+       */
+      (prev) => [
       {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         at: new Date().toISOString(),
@@ -481,7 +486,7 @@ export default function Editor() {
           python: 'py',
           json: 'json',
         }
-        normalizedName = `${normalizedName}.${extensionMap[newFileLanguage] || 'js'}`
+        normalizedName = `${normalizedName}.${/** @type {any} */(extensionMap)[newFileLanguage] || 'js'}`
       }
 
       const created = await createProjectFile({
@@ -663,10 +668,18 @@ export default function Editor() {
 
     const nextCode = aiSuggestion.suggestedCode
 
-    setFiles((prev) =>
-      prev.map((file) =>
-        file.id === activeFile.id ? { ...file, content: nextCode } : file
-      )
+    setFiles(
+      /**
+       * @param {any} prev
+       */
+      (prev) =>
+        prev.map(
+          /**
+           * @param {any} file
+           */
+          (file) =>
+            file.id === activeFile.id ? { ...file, content: nextCode } : file
+        )
     )
 
     saveContentDebounced.cancel()
@@ -704,19 +717,32 @@ export default function Editor() {
   function restoreTimelineEntry(item) {
     if (!activeFile || !item?.snapshot) return
 
-    setFiles((prev) =>
-      prev.map((file) =>
-        file.id === activeFile.id ? { ...file, content: item.snapshot } : file
-      )
+    setFiles(
+      /**
+       * @param {any} prev
+       */
+      (prev) =>
+        prev.map(
+          /**
+           * @param {any} file
+           */
+          (file) =>
+            file.id === activeFile.id ? { ...file, content: item.snapshot } : file
+        )
     )
   }
 
+  /** @type {any[]} */
   const visibleRemoteCursors = remoteCursors.filter(
     (cursor) => cursor.userId !== user?.id && cursor.fileId === activeFile?.id
   )
 
-  const replayItems = timeline.map((item) => ({
-    ...item,
+  const replayItems = timeline.map(
+    /**
+     * @param {any} item
+     */
+    (item) => ({
+      .../** @type {any} */(item),
     snapshot:
       item.detail === activeFile?.name
         ? activeFile?.content || ''
