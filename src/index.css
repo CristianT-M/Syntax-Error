@@ -8,40 +8,55 @@
   :root {
     --background: 220 30% 98%;
     --foreground: 229 35% 14%;
+<<<<<<< HEAD
 
     --card: 0 0% 100%;
     --card-foreground: 229 35% 14%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 229 35% 14%;
-
     --primary: 344 86% 62%;
     --primary-foreground: 0 0% 100%;
-
     --secondary: 223 30% 94%;
     --secondary-foreground: 229 25% 22%;
-
     --muted: 220 24% 94%;
     --muted-foreground: 225 14% 42%;
-
     --accent: 206 88% 55%;
     --accent-foreground: 0 0% 100%;
-
     --destructive: 0 78% 58%;
     --destructive-foreground: 0 0% 100%;
-
     --border: 224 22% 87%;
     --input: 224 22% 87%;
     --ring: 344 86% 62%;
-
+=======
+    --card: 0 0% 100%;
+    --card-foreground: 229 35% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 229 35% 14%;
+    --primary: 344 86% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 223 30% 94%;
+    --secondary-foreground: 229 25% 22%;
+    --muted: 220 24% 94%;
+    --muted-foreground: 225 14% 42%;
+    --accent: 206 88% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 78% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 224 22% 87%;
+    --input: 224 22% 87%;
+    --ring: 344 86% 62%;
+>>>>>>> 31c57fe (Initial commit)
     --chart-1: 344 86% 62%;
     --chart-2: 206 88% 55%;
     --chart-3: 160 75% 42%;
     --chart-4: 38 92% 55%;
     --chart-5: 268 80% 62%;
+<<<<<<< HEAD
 
     --radius: 1rem;
-
+=======
+    --radius: 1rem;
+>>>>>>> 31c57fe (Initial commit)
     --sidebar-background: 220 30% 98%;
     --sidebar-foreground: 229 35% 14%;
     --sidebar-primary: 344 86% 62%;
@@ -50,7 +65,10 @@
     --sidebar-accent-foreground: 229 25% 22%;
     --sidebar-border: 224 22% 87%;
     --sidebar-ring: 344 86% 62%;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 31c57fe (Initial commit)
     --font-sans: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
@@ -58,6 +76,7 @@
   .dark {
     --background: 228 34% 8%;
     --foreground: 220 20% 94%;
+<<<<<<< HEAD
 
     --card: 229 32% 11%;
     --card-foreground: 220 20% 94%;
@@ -84,21 +103,42 @@
     --input: 227 18% 20%;
     --ring: 344 86% 62%;
 
+=======
+    --card: 229 32% 11%;
+    --card-foreground: 220 20% 94%;
+    --popover: 229 32% 11%;
+    --popover-foreground: 220 20% 94%;
+    --primary: 344 86% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 227 22% 16%;
+    --secondary-foreground: 220 20% 90%;
+    --muted: 227 18% 18%;
+    --muted-foreground: 224 10% 64%;
+    --accent: 193 91% 56%;
+    --accent-foreground: 228 34% 8%;
+    --destructive: 0 78% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 227 18% 20%;
+    --input: 227 18% 20%;
+    --ring: 344 86% 62%;
+>>>>>>> 31c57fe (Initial commit)
     --chart-1: 344 86% 62%;
     --chart-2: 193 91% 56%;
     --chart-3: 155 75% 42%;
     --chart-4: 39 95% 60%;
     --chart-5: 271 86% 68%;
+<<<<<<< HEAD
 
-    --sidebar-background: 228 34% 8%;
-    --sidebar-foreground: 220 20% 94%;
+=======
+>>>>>>> 31c57fe (Initial commit)
+    --sidebar-background: 220 30% 98%;
+    --sidebar-foreground: 229 35% 14%;
     --sidebar-primary: 344 86% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 227 22% 16%;
-    --sidebar-accent-foreground: 220 20% 94%;
-    --sidebar-border: 227 18% 20%;
+    --sidebar-accent: 223 30% 94%;
+    --sidebar-accent-foreground: 229 25% 22%;
+    --sidebar-border: 224 22% 87%;
     --sidebar-ring: 344 86% 62%;
-  }
 
   * {
     @apply border-border outline-ring/50;
@@ -187,6 +227,7 @@
     "sidebar bottom sidepanel";
 }
 
+<<<<<<< HEAD
 .editor-area-sidebar {
   grid-area: sidebar;
 }
@@ -202,6 +243,12 @@
 .editor-area-sidepanel {
   grid-area: sidepanel;
 }
+=======
+.editor-area-sidebar { grid-area: sidebar; }
+.editor-area-main { grid-area: editor; }
+.editor-area-bottom { grid-area: bottom; }
+.editor-area-sidepanel { grid-area: sidepanel; }
+>>>>>>> 31c57fe (Initial commit)
 
 @media (max-width: 1279px) {
   .editor-grid {
@@ -213,9 +260,13 @@
       "bottom sidepanel";
   }
 
+<<<<<<< HEAD
   .editor-area-main {
     grid-area: main;
   }
+=======
+  .editor-area-main { grid-area: main; }
+>>>>>>> 31c57fe (Initial commit)
 }
 
 @media (max-width: 1023px) {
@@ -223,4 +274,8 @@
     display: flex;
     flex-direction: column;
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 31c57fe (Initial commit)
