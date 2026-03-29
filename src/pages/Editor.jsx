@@ -90,7 +90,8 @@ function buildPreviewDocument(files) {
       <html>
         <body style="background:#07111f;color:white;font-family:Inter,Arial,sans-serif;padding:24px;">
           <h1>Nu există fișier HTML</h1>
-          <p>Creează un fișier .html ca să meargă preview-ul.</p>
+          <p>Creează un fișier .html ca să meargă preview-ul..</p>
+          <p>HTML</p>
         </body>
       </html>
     `
