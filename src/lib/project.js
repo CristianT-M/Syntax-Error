@@ -31,9 +31,6 @@ export function generateShareToken(length = 18) {
   return result
 }
 
-/**
- * @param {string} userId
- */
 export function getUserCursorColor(userId) {
   if (!userId) return CURSOR_COLORS[0]
 
@@ -46,24 +43,15 @@ export function getUserCursorColor(userId) {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length]
 }
 
-/**
- * @param {any} user
- * @param {any} profile
- */
 export function getUserDisplayName(user, profile) {
-  return (
-    profile?.username ||
-    user?.user_metadata?.username ||
-    user?.email?.split('@')[0] ||
-    'User'
-  )
+  return profile?.username || user?.email || 'User'
 }
 
-/**
- * @param {any} user
- */
 export async function ensureProfile(user) {
   if (!user?.id) return null
+
+  const username = user.email || 'user@example.com'
+  const cursorColor = getUserCursorColor(user.id)
 
   const { data: existing, error: existingError } = await supabase
     .from('profiles')
@@ -73,20 +61,12 @@ export async function ensureProfile(user) {
 
   if (existingError) throw existingError
 
-  const username =
-    existing?.username ||
-    user.user_metadata?.username ||
-    user.email?.split('@')[0] ||
-    'User'
-
-  const cursorColor = existing?.cursor_color || getUserCursorColor(user.id)
-
   if (existing) {
     const { data, error } = await supabase
       .from('profiles')
       .update({
         username,
-        cursor_color: cursorColor,
+        cursor_color: existing.cursor_color || cursorColor,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -112,9 +92,6 @@ export async function ensureProfile(user) {
   return data
 }
 
-/**
- * @param {{name: string, ownerId: string, description?: string, language?: string}} params
- */
 export async function createProject({
   name,
   ownerId,
@@ -150,13 +127,9 @@ export async function createProject({
     })
 
   if (memberError) throw memberError
-
   return project
 }
 
-/**
- * @param {string} slug
- */
 export async function getProjectBySlug(slug) {
   const { data, error } = await supabase
     .from('projects')
@@ -168,11 +141,6 @@ export async function getProjectBySlug(slug) {
   return data
 }
 
-/**
- * @param {string} projectId
- * @param {string} userId
- * @param {string} role
- */
 export async function ensureProjectMembership(projectId, userId, role = 'editor') {
   const { data: existing, error: existingError } = await supabase
     .from('project_members')
@@ -198,9 +166,6 @@ export async function ensureProjectMembership(projectId, userId, role = 'editor'
   return data
 }
 
-/**
- * @param {string} projectId
- */
 export async function getProjectMembers(projectId) {
   const { data: members, error: membersError } = await supabase
     .from('project_members')
@@ -228,9 +193,6 @@ export async function getProjectMembers(projectId) {
   }))
 }
 
-/**
- * @param {string} projectId
- */
 export async function getProjectFiles(projectId) {
   const { data, error } = await supabase
     .from('project_files')
@@ -242,9 +204,6 @@ export async function getProjectFiles(projectId) {
   return data || []
 }
 
-/**
- * @param {{projectId: string, name: string, language: string, content?: string, isEntry?: boolean, updatedBy?: string | null}} params
- */
 export async function createProjectFile({
   projectId,
   name,
@@ -270,9 +229,6 @@ export async function createProjectFile({
   return data
 }
 
-/**
- * @param {{fileId: string, content: string, userId: string}} params
- */
 export async function updateProjectFile({ fileId, content, userId }) {
   const { data, error } = await supabase
     .from('project_files')
@@ -289,39 +245,17 @@ export async function updateProjectFile({ fileId, content, userId }) {
   return data
 }
 
-/**
- * @param {{fileId: string, name: string}} params
- */
-export async function renameProjectFile({ fileId, name }) {
-  const { data, error } = await supabase
-    .from('project_files')
-    .update({
-      name,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', fileId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-/**
- * @param {string} fileId
- */
-export async function deleteProjectFile(fileId) {
+export async function touchProject(projectId) {
   const { error } = await supabase
-    .from('project_files')
-    .delete()
-    .eq('id', fileId)
+    .from('projects')
+    .update({
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', projectId)
 
   if (error) throw error
 }
 
-/**
- * @param {string} projectId
- */
 export async function getProjectMessages(projectId) {
   const { data: messages, error: messagesError } = await supabase
     .from('chat_messages')
@@ -336,7 +270,7 @@ export async function getProjectMessages(projectId) {
 
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, cursor_color')
+    .select('id, username, cursor_color')
     .in('id', userIds)
 
   if (profilesError) throw profilesError
@@ -349,9 +283,6 @@ export async function getProjectMessages(projectId) {
   }))
 }
 
-/**
- * @param {{projectId: string, userId: string, content: string}} params
- */
 export async function sendProjectMessage({ projectId, userId, content }) {
   const cleanContent = content?.trim()
   if (!cleanContent) return null
@@ -370,16 +301,178 @@ export async function sendProjectMessage({ projectId, userId, content }) {
   return data
 }
 
-/**
- * @param {string} projectId
- */
-export async function touchProject(projectId) {
-  const { error } = await supabase
-    .from('projects')
-    .update({
-      last_activity_at: new Date().toISOString(),
+export async function createProjectSnapshot({
+  projectId,
+  fileId,
+  fileName,
+  content,
+  actorId,
+  type = 'edit',
+}) {
+  const { data, error } = await supabase
+    .from('project_snapshots')
+    .insert({
+      project_id: projectId,
+      file_id: fileId,
+      file_name: fileName,
+      content,
+      actor_id: actorId,
+      event_type: type,
     })
-    .eq('id', projectId)
+    .select()
+    .single()
 
   if (error) throw error
+  return data
+}
+
+export async function getProjectSnapshots(projectId) {
+  const { data, error } = await supabase
+    .from('project_snapshots')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function addTerminalEvent({
+  projectId,
+  userId,
+  type,
+  command = null,
+  output = null,
+  exitCode = null,
+  meta = null,
+}) {
+  const { data, error } = await supabase
+    .from('terminal_events')
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      type,
+      command,
+      output,
+      exit_code: exitCode,
+      meta,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getTerminalEvents(projectId) {
+  const { data, error } = await supabase
+    .from('terminal_events')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: true })
+    .limit(300)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function searchUsersByEmail(email) {
+  const query = email?.trim()
+  if (!query) return []
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username')
+    .ilike('username', `%${query}%`)
+    .limit(10)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function sendFriendRequest(fromUserId, toUserId) {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return null
+
+  const { data: existing, error: existingError } = await supabase
+    .from('friend_requests')
+    .select('*')
+    .eq('from_user_id', fromUserId)
+    .eq('to_user_id', toUserId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+  if (existing) return existing
+
+  const { data, error } = await supabase
+    .from('friend_requests')
+    .insert({
+      from_user_id: fromUserId,
+      to_user_id: toUserId,
+      status: 'pending',
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getIncomingFriendRequests(userId) {
+  const { data, error } = await supabase
+    .from('friend_requests')
+    .select('*')
+    .eq('to_user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function acceptFriendRequest(requestId) {
+  const { data: req, error: reqError } = await supabase
+    .from('friend_requests')
+    .update({ status: 'accepted' })
+    .eq('id', requestId)
+    .select()
+    .single()
+
+  if (reqError) throw reqError
+
+  const { error: friendshipError } = await supabase
+    .from('friendships')
+    .insert([
+      {
+        user_id: req.from_user_id,
+        friend_id: req.to_user_id,
+      },
+      {
+        user_id: req.to_user_id,
+        friend_id: req.from_user_id,
+      },
+    ])
+
+  if (friendshipError) throw friendshipError
+  return req
+}
+
+export async function getFriends(userId) {
+  const { data: friendships, error } = await supabase
+    .from('friendships')
+    .select('*')
+    .eq('user_id', userId)
+
+  if (error) throw error
+  if (!friendships?.length) return []
+
+  const ids = friendships.map((f) => f.friend_id)
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, username, cursor_color')
+    .in('id', ids)
+
+  if (profilesError) throw profilesError
+  return profiles || []
 }

@@ -1,16 +1,15 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import Editor from '@monaco-editor/react'
-import { Check, Copy, Maximize2, Minimize2, Play } from 'lucide-react'
 
 function getLanguageFromFileName(fileName = '') {
   const ext = fileName.split('.').pop()?.toLowerCase()
 
   switch (ext) {
     case 'js':
+    case 'jsx':
     case 'mjs':
     case 'cjs':
-    case 'jsx':
       return 'javascript'
     case 'ts':
     case 'tsx':
@@ -20,26 +19,12 @@ function getLanguageFromFileName(fileName = '') {
     case 'html':
       return 'html'
     case 'css':
-    case 'scss':
       return 'css'
-    case 'md':
-      return 'markdown'
     case 'py':
       return 'python'
     case 'java':
       return 'java'
-    case 'php':
-      return 'php'
-    case 'xml':
-      return 'xml'
-    case 'sql':
-      return 'sql'
-    case 'yml':
-    case 'yaml':
-      return 'yaml'
     case 'cpp':
-    case 'cc':
-    case 'cxx':
       return 'cpp'
     case 'c':
       return 'c'
@@ -48,29 +33,16 @@ function getLanguageFromFileName(fileName = '') {
   }
 }
 
-/**
- * @param {{
- *   value: string;
- *   onChange: Function;
- *   filename?: string;
- *   onRun?: Function;
- *   onCursorChange?: Function;
- *   remoteCursors?: any[];
- * }} props
- */
 export default function MonacoCodeEditor({
   value,
   onChange,
   filename = 'main.js',
-  onRun,
   onCursorChange,
   remoteCursors = [],
 }) {
   const editorRef = useRef(null)
   const monacoRef = useRef(null)
   const decorationsRef = useRef([])
-  const [copied, setCopied] = useState(false)
-  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const language = useMemo(() => getLanguageFromFileName(filename), [filename])
 
@@ -81,17 +53,10 @@ export default function MonacoCodeEditor({
     monaco.editor.defineTheme('itecify-dark', {
       base: 'vs-dark',
       inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'C084FC' },
-        { token: 'string', foreground: '34D399' },
-        { token: 'number', foreground: 'F59E0B' },
-      ],
+      rules: [],
       colors: {
         'editor.background': '#07111f',
-        'editor.foreground': '#e5eef9',
         'editor.lineHighlightBackground': '#0b1529',
-        'editorCursor.foreground': '#a855f7',
       },
     })
 
@@ -103,8 +68,6 @@ export default function MonacoCodeEditor({
         column: event.position.column,
       })
     })
-
-    editor.focus()
   }
 
   useEffect(() => {
@@ -158,71 +121,23 @@ export default function MonacoCodeEditor({
     )
   }, [remoteCursors])
 
-  async function handleCopy() {
-    const text = editorRef.current?.getValue() ?? ''
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1200)
-  }
-
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-[#07111f] p-4' : ''}>
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#07111f]">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <div>
-            <div className="text-sm font-semibold text-white">{filename}</div>
-            <div className="text-xs text-slate-400">{language}</div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onRun && (
-              <button
-                onClick={onRun}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10"
-              >
-                <Play className="h-4 w-4" />
-                Run
-              </button>
-            )}
-
-            <button
-              onClick={handleCopy}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-
-            <button
-              onClick={() => setIsFullscreen((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10"
-            >
-              {isFullscreen ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
-              {isFullscreen ? 'Exit full' : 'Fullscreen'}
-            </button>
-          </div>
-        </div>
-
-        <Editor
-          height={isFullscreen ? 'calc(100vh - 110px)' : '520px'}
-          language={language}
-          value={value}
-          onChange={(v) => onChange?.(v ?? '')}
-          onMount={handleMount}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            smoothScrolling: true,
-            automaticLayout: true,
-            wordWrap: 'on',
-            padding: { top: 16, bottom: 16 },
-          }}
-        />
-      </div>
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#07111f]">
+      <Editor
+        height="520px"
+        language={language}
+        value={value}
+        onChange={(v) => onChange?.(v ?? '')}
+        onMount={handleMount}
+        options={{
+          fontSize: 14,
+          minimap: { enabled: false },
+          automaticLayout: true,
+          wordWrap: 'on',
+          smoothScrolling: true,
+          padding: { top: 16, bottom: 16 },
+        }}
+      />
     </div>
   )
 }

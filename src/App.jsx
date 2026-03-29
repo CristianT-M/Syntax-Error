@@ -9,6 +9,8 @@ import Landing from './pages/Landing'
 import Editor from './pages/Editor'
 import Dashboard from './pages/Dashboard'
 import Auth from './pages/Auth'
+import Friends from './pages/Friends'
+import QuickCreateEditor from './pages/QuickCreateEditor'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -25,7 +27,7 @@ function AppRoutes() {
         path="/editor"
         element={
           <ProtectedRoute>
-            <Navigate to="/dashboard" replace />
+            <QuickCreateEditor />
           </ProtectedRoute>
         }
       />
@@ -44,6 +46,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/friends"
+        element={
+          <ProtectedRoute>
+            <Friends />
           </ProtectedRoute>
         }
       />

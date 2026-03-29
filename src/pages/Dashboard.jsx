@@ -1,26 +1,30 @@
 // @ts-nocheck
-
 import React, { useMemo, useState } from 'react'
-import { Save, ArrowLeft } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, Code2, Search, Play, MoreHorizontal, Trash2, FolderOpen, GitBranch, Activity, Copy, Users } from 'lucide-react'
+import {
+  Activity,
+  Code2,
+  Copy,
+  FolderOpen,
+  GitBranch,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  Users,
+} from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import {
@@ -28,12 +32,11 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select"
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/AuthContext'
-import AuthButtons from '../components/AuthButtons'
 import { createProject, ensureProfile } from '@/lib/project'
 
 const LANG_COLORS = {
@@ -67,9 +70,7 @@ const DEFAULT_FILES = {
   },
   rust: {
     name: 'main.rs',
-    content: `fn main() {
-  println!("Hello from iTECify!");
-}`,
+    content: `fn main() { println!("Hello from iTECify!"); }`,
   },
   typescript: {
     name: 'index.ts',
@@ -77,41 +78,21 @@ const DEFAULT_FILES = {
   },
   go: {
     name: 'main.go',
-    content: `package main
-
-import "fmt"
-
-func main() {
-  fmt.Println("Hello from iTECify!")
-}`,
+    content: `package main\nimport "fmt"\nfunc main() { fmt.Println("Hello from iTECify!") }`,
   },
   cpp: {
     name: 'main.cpp',
-    content: `#include <iostream>
-using namespace std;
-
-int main() {
-  cout << "Hello from iTECify!" << endl;
-  return 0;
-}`,
+    content: `#include <iostream>\nusing namespace std;\nint main() { cout << "Hello from iTECify!" << endl; return 0; }`,
   },
   java: {
     name: 'Main.java',
-    content: `public class Main {
-  public static void main(String[] args) {
-    System.out.println("Hello from iTECify!");
-  }
-}`,
+    content: `public class Main { public static void main(String[] args) { System.out.println("Hello from iTECify!"); } }`,
   },
 }
 
-/**
- * @param {any} project
- */
 async function handleSaveProject(project) {
   try {
     const files = Array.isArray(project?.project_files) ? project.project_files : []
-
     const data = {
       project: {
         id: project.id,
@@ -119,13 +100,13 @@ async function handleSaveProject(project) {
         description: project.description,
         language: project.language,
         slug: project.slug,
-        saved_at: new Date().toISOString()
+        saved_at: new Date().toISOString(),
       },
-      files
+      files,
     }
 
     const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: 'application/json'
+      type: 'application/json',
     })
 
     const url = URL.createObjectURL(blob)
@@ -138,7 +119,7 @@ async function handleSaveProject(project) {
     URL.revokeObjectURL(url)
   } catch (error) {
     console.error(error)
-    alert('Nu s-a putut salva proiectul.')
+    alert('Could not save the project.')
   }
 }
 
@@ -149,7 +130,7 @@ export default function Dashboard() {
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
-    language: 'javascript'
+    language: 'javascript',
   })
 
   const queryClient = useQueryClient()
@@ -162,11 +143,8 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-.select(`
-  *,
-  project_files (*)
-`)
-        .or(`owner_id.eq.${user.id},id.in.(select project_id from project_members where user_id = '${user.id}')`)
+        .select('*, project_files(*)')
+        .eq('owner_id', user.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -195,27 +173,20 @@ export default function Dashboard() {
           language: data.language,
           content: starter.content,
           is_entry: true,
-          updated_by: user.id
+          updated_by: user.id,
         })
 
       if (fileError) throw fileError
-
       return project
     },
-
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
       setCreateOpen(false)
-      setNewProject({
-        name: '',
-        description: '',
-        language: 'javascript'
-      })
+      setNewProject({ name: '', description: '', language: 'javascript' })
       navigate(`/editor/${project.slug}?share=${project.share_token}`)
     },
-
     onError: (error) => {
-      alert(error.message || 'Eroare la creare proiect.')
+      alert(error.message || 'Error creating project.')
     },
   })
 
@@ -232,7 +203,7 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['projects', user?.id] })
     },
     onError: (error) => {
-      alert(error.message || 'Eroare la ștergere proiect.')
+      alert(error.message || 'Error deleting project.')
     },
   })
 
@@ -251,272 +222,208 @@ export default function Dashboard() {
       setTimeout(() => setCopiedId(null), 1500)
     } catch (error) {
       console.error(error)
-      alert('Nu am putut copia linkul proiectului.')
+      alert('Could not copy the project link.')
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-20 border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-3">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/20">
-                <Code2 className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <span className="text-sm font-bold">iTECify</span>
+    <div className="min-h-screen bg-[#050b14] text-white">
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+              <Activity className="h-3.5 w-3.5" />
+              Collaboration sandbox
             </div>
+            <h1 className="text-4xl font-bold">iTECify</h1>
+            <p className="mt-2 text-slate-400">
+              Real-time code collaboration, AI suggestions, chat, and project replay.
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Caută proiecte..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 w-56 bg-secondary/50 pl-8 text-xs"
-              />
-            </div>
-
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-8 gap-1.5 bg-primary text-xs hover:bg-primary/90">
-                  <Plus className="h-3.5 w-3.5" />
-                  Proiect Nou
-                </Button>
-              </DialogTrigger>
-
-              <DialogContent className="border-border bg-card">
-                <DialogHeader className="space-y-2">
-                  <DialogTitle className="text-lg">Creează un proiect nou</DialogTitle>
-                </DialogHeader>
-
-                <div className="mt-2 space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs">Nume proiect</Label>
-                    <Input
-                      placeholder="Ex: iTEC API Backend"
-                      value={newProject.name}
-                      onChange={(e) =>
-                        setNewProject({ ...newProject, name: e.target.value })
-                      }
-                      className="bg-secondary/50"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">Descriere</Label>
-                    <Input
-                      placeholder="O scurtă descriere..."
-                      value={newProject.description}
-                      onChange={(e) =>
-                        setNewProject({ ...newProject, description: e.target.value })
-                      }
-                      className="bg-secondary/50"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">Limbaj principal</Label>
-                    <Select
-                      value={newProject.language}
-                      onValueChange={(value) =>
-                        setNewProject({ ...newProject, language: value })
-                      }
-                    >
-                      <SelectTrigger className="bg-secondary/50">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(LANG_LABELS).map(([key, value]) => (
-                          <SelectItem key={key} value={key}>
-                            {value}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    className="w-full bg-primary hover:bg-primary/90"
-                    onClick={() => createMutation.mutate(newProject)}
-                    disabled={!newProject.name.trim() || createMutation.isPending}
-                  >
-                    {createMutation.isPending ? 'Se creează...' : 'Creează Proiect'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            <AuthButtons />
-          </div>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="rounded-2xl bg-violet-600 hover:bg-violet-500"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="mb-6">
-          <h1 className="mb-1 text-2xl font-bold">Proiectele tale</h1>
-          <p className="text-sm text-muted-foreground">
-            Creează și colaborează pe proiecte în timp real
-          </p>
+        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+          <Search className="h-4 w-4 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects..."
+            className="border-0 bg-transparent text-white placeholder:text-slate-500 focus-visible:ring-0"
+          />
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-40 animate-pulse rounded-xl bg-secondary/30" />
+              <div
+                key={i}
+                className="h-56 animate-pulse rounded-3xl border border-white/10 bg-white/5"
+              />
             ))}
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="py-20 text-center">
-            <FolderOpen className="mx-auto mb-4 h-12 w-12 text-muted-foreground/30" />
-            <h3 className="mb-1 font-medium text-muted-foreground">
-              {search ? 'Niciun proiect găsit' : 'Niciun proiect încă'}
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center">
+            <Code2 className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+            <h3 className="text-2xl font-semibold">
+              {search ? 'No projects found' : 'No projects yet'}
             </h3>
-            <p className="mb-4 text-sm text-muted-foreground/60">
+            <p className="mt-2 text-slate-400">
               {search
-                ? 'Încearcă alt termen de căutare'
-                : 'Creează primul tău proiect pentru a începe'}
+                ? 'Try another search term.'
+                : 'Create your first collaborative coding workspace.'}
             </p>
-
-            {!search && (
-              <Button
-                size="sm"
-                onClick={() => setCreateOpen(true)}
-                className="gap-1.5 bg-primary hover:bg-primary/90"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Proiect Nou
-              </Button>
-            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredProjects.map((project, i) => {
-              const collaboratorCount = project.project_members?.length || 1
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {filteredProjects.map((project, i) => (
+              <motion.div
+                key={project.id}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <Card className="rounded-3xl border-white/10 bg-[#0a1322] text-white">
+                  <CardHeader className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-xl font-semibold">{project.name}</h3>
+                        {project.description ? (
+                          <p className="mt-1 text-sm text-slate-400">{project.description}</p>
+                        ) : null}
+                      </div>
 
-              return (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                >
-                  <Card className="group overflow-hidden border-border bg-card/60 transition-all hover:border-primary/30">
-                    <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            LANG_COLORS[project.language] || 'bg-muted-foreground'
-                          }`}
+                      <button
+                        onClick={() => deleteMutation.mutate(project.id)}
+                        className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 hover:bg-white/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+                        <span
+                          className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${LANG_COLORS[project.language] || 'bg-white'}`}
                         />
-                        <h3 className="max-w-[180px] truncate text-sm font-semibold">
-                          {project.name}
-                        </h3>
-                      </div>
+                        {LANG_LABELS[project.language] || project.language}
+                      </Badge>
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                      <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+                        <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+                        {project.slug}
+                      </Badge>
 
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            className="text-xs"
-                            onClick={() => copyProjectLink(project)}
-                          >
-                            <Copy className="mr-2 h-3 w-3" />
-                            {copiedId === project.id ? 'Copiat' : 'Copiază linkul'}
-                          </DropdownMenuItem>
+                      <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+                        <Users className="mr-1.5 h-3.5 w-3.5" />
+                        Shared
+                      </Badge>
+                    </div>
+                  </CardHeader>
 
-                          <DropdownMenuItem
-                            className="text-destructive text-xs"
-                            onClick={() => deleteMutation.mutate(project.id)}
-                          >
-                            <Trash2 className="mr-2 h-3 w-3" />
-                            Șterge
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      onClick={() => navigate(`/editor/${project.slug}?share=${project.share_token}`)}
+                      className="w-full rounded-2xl bg-violet-600 hover:bg-violet-500"
+                    >
+                      <FolderOpen className="mr-2 h-4 w-4" />
+                      Open in Editor
+                    </Button>
 
-                    <CardContent className="p-4 pt-0">
-                      {project.description && (
-                        <p className="mb-3 line-clamp-2 text-[11px] text-muted-foreground">
-                          {project.description}
-                        </p>
-                      )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        variant="secondary"
+                        onClick={() => copyProjectLink(project)}
+                        className="rounded-2xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        {copiedId === project.id ? 'Copied' : 'Copy Link'}
+                      </Button>
 
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="h-5 gap-1 border-border text-[9px]">
-                          <GitBranch className="h-2.5 w-2.5" />
-                          main
-                        </Badge>
-
-                        <Badge variant="outline" className="h-5 border-border text-[9px]">
-                          {LANG_LABELS[project.language] || project.language}
-                        </Badge>
-
-                        <Badge variant="outline" className="h-5 gap-1 border-border text-[9px]">
-                          <Users className="h-2.5 w-2.5" />
-                          {collaboratorCount} colaboratori
-                        </Badge>
-
-                        {project.status === 'running' && (
-                          <Badge
-                            variant="secondary"
-                            className="h-5 gap-1 border-emerald-500/20 bg-emerald-500/10 text-[9px] text-emerald-400"
-                          >
-                            <Activity className="h-2.5 w-2.5" />
-                            Running
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Link to={`/editor/${project.slug}?share=${project.share_token}`}>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="h-7 w-full gap-1.5 text-xs hover:bg-primary/10 hover:text-primary"
-                          >
-                            <Play className="h-3 w-3" />
-                            Deschide în Editor
-                          </Button>
-                        </Link>
-
-                        <button
-                          onClick={() => handleSaveProject(project)}
-                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                        >
-                          <Save className="h-4 w-4" />
-                          Salvează proiectul
-                        </button>
-
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {window.location.origin}/editor/{project.slug}?share={project.share_token}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )
-            })}
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleSaveProject(project)}
+                        className="rounded-2xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        Export
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
           </div>
         )}
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="border-white/10 bg-[#0a1322] text-white">
+            <DialogHeader>
+              <DialogTitle>Create Project</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={newProject.name}
+                  onChange={(e) =>
+                    setNewProject((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  className="mt-2 border-white/10 bg-white/5 text-white"
+                />
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <Input
+                  value={newProject.description}
+                  onChange={(e) =>
+                    setNewProject((prev) => ({ ...prev, description: e.target.value }))
+                  }
+                  className="mt-2 border-white/10 bg-white/5 text-white"
+                />
+              </div>
+
+              <div>
+                <Label>Main language</Label>
+                <Select
+                  value={newProject.language}
+                  onValueChange={(value) =>
+                    setNewProject((prev) => ({ ...prev, language: value }))
+                  }
+                >
+                  <SelectTrigger className="mt-2 border-white/10 bg-white/5 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {Object.entries(LANG_LABELS).map(([key, value]) => (
+                      <SelectItem key={key} value={key}>
+                        {value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={() => createMutation.mutate(newProject)}
+                disabled={!newProject.name.trim() || createMutation.isPending}
+                className="w-full rounded-2xl bg-violet-600 hover:bg-violet-500"
+              >
+                {createMutation.isPending ? 'Creating...' : 'Create Project'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
